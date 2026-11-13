@@ -1,0 +1,10 @@
+{
+  "volumen_jeringa": 3.0,
+  "factor_esp": 1.0,
+  "factor_ins": 1.0,
+  "temperatura_C": null,
+  "presion_mmHg": null,
+  "humedad_pct": null,
+  "fecha": "pendiente",
+  "nota": "Realizar calibración en esta computadora antes del primer estudio."
+}

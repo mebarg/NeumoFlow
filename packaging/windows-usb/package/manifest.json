@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "device_id": "USB\\VID_0EE5&PID_0103",
+  "source": "Exported installed libwdi package; matching Zadig original INF",
+  "certificate_thumbprint": "AE87D0D43947DE135B9C33F87D00CE9E9ED25D2B",
+  "certificate_not_after_utc": "2029-01-01T00:00:00Z",
+  "clean_install_verified": false,
+  "sha256": {
+    "Medical_Graphics_CPFS_USB.inf": "7dcbf54685cd4a2be3ba52e297ef4975f15965c011eea602075f711895b224f2",
+    "Medical_Graphics_CPFS_USB.cat": "effbee91170b5b9365b5c52490c87e6baf54ed9112cdf3b9e687031f0e5e1b89",
+    "amd64/WdfCoInstaller01011.dll": "f6fb39a8578f19616570d5a3dc7212c84a9da232b30a03376bbf08f4264fedf2",
+    "amd64/winusbcoinstaller2.dll": "981a17effddbc20377512ddaec9f22c2b7067e17a3e2a8ccf82bb7bb7b2420b6",
+    "x86/WdfCoInstaller01011.dll": "c7649879a10c9332fc0f9744c7e3224647aee9e7e62c7e21cf9e987462e3dd06",
+    "x86/winusbcoinstaller2.dll": "ebe3b7708dd974ee87efed3113028d266af87ca8dbae77c47c6f7612824d3d6c",
+    "signer.cer": "05dfb4db88e96b380b7d681c835e57314dcc5ec0207f6520f4072878792dac29"
+  }
+}

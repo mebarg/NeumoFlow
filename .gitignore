@@ -1,0 +1,61 @@
+# Sólo se versionan las carpetas de la aplicación y su mantenimiento.
+/*
+!/.gitignore
+!/.gitattributes
+!/README.md
+!/requirements.txt
+!/requirements-build.txt
+!/app/
+!/tests/
+!/packaging/
+!/tools/
+!/docs/
+
+# Entornos, caché y compilaciones
+**/__pycache__/
+*.py[cod]
+.venv*/
+packaging/windows-status.json
+packaging/innosetup-*.exe
+packaging/windows-usb/exported/
+
+# Datos de pacientes, exportaciones y registros locales
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.cow
+*.espiro
+*.pcap
+*.pcapng
+*.pdf
+*.log
+*.csv
+*.bak
+*.mdf
+*.ldf
+*.zip
+*.exe
+*.png
+*.jpg
+*.jpeg
+!app/data/brand/*.png
+!tests/fixtures/*.csv
+
+# La documentación publicada contiene guías y fuentes de referencia.
+/docs/*
+!/docs/ecuaciones-referencia.md
+!/docs/gli-global-sources.json
+!/docs/gli-volumes-sources.md
+!/docs/importacion-estudios.md
+!/docs/referencias-svc-mvv.md
+!/docs/svc-mvv.md
+!/docs/tabla-etapas-fvc.md
+!/docs/tendencia-paciente.md
+
+# Sólo herramientas de mantenimiento de recursos propios.
+/tools/*
+!/tools/build_brand_assets.py
+!/tools/build_gli_volumes_data.py

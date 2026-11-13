@@ -1,0 +1,14 @@
+{
+  "source": "https://github.com/overdodactyl/pft",
+  "commit": "7489d487bb5bffd5418e66362ebeb0a7332c9916",
+  "workbook": "gli_global_lookuptables_dec6.xlsx",
+  "paper": "https://doi.org/10.1164/rccm.202205-0963OC",
+  "csv_sha256": {
+    "GLI_2022_FVC_MALE.csv": "dfe5970234ce3d603b7014965375353f0805acd8b10b28baa089f9ae0cbcf7cb",
+    "GLI_2022_FVC_FEMALE.csv": "d706d6a54e034f29c88181a402d0eedadfeacf44eef5b70244f69426e06d0280",
+    "GLI_2022_FEV1_MALE.csv": "829064a227dda5b1191dcfed61944052c1f69d51342d8043315bcfbbb1137f5f",
+    "GLI_2022_FEV1_FEMALE.csv": "6925fa4da886b67ec85377e8fd5b6da030ce442ba28136bef69ac93b2aa2a62a",
+    "GLI_2022_FEV1FVC_MALE.csv": "d740d78fa108a89b81ab4a25e4476357dca4f72e1db49974d3939173f962ce9e",
+    "GLI_2022_FEV1FVC_FEMALE.csv": "669c4b882f99447045ec9252a49071527041f5442d1cdb969ff5d3b1f46da7b3"
+  }
+}

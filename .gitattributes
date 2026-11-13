@@ -1,0 +1,5 @@
+# Preserve the verified calibration table bytes on Windows and Linux.
+app/data/lup1.cfg -text
+tests/fixtures/*.gz -text
+# Keep the signed USB package byte-for-byte intact on every platform.
+packaging/windows-usb/package/** -text

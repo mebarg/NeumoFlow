@@ -1,0 +1,45 @@
+GLI Global 2022 numerical reference data
+
+Bowerman C, Bhakta NR, Brazzale D, et al. A race-neutral approach to the
+interpretation of lung function measurements. AJRCCM 2023;207:768-774.
+https://doi.org/10.1164/rccm.202205-0963OC
+Published workbook: gli_global_lookuptables_dec6.xlsx.
+GLI equations/tables are available for software implementation:
+https://gli-calculator.ersnet.org/
+
+Spline CSV transcription and independent numerical validation grid obtained
+from pft 1.0.4, commit 7489d487bb5bffd5418e66362ebeb0a7332c9916:
+https://github.com/overdodactyl/pft
+pft's build_gli_2022.R regenerates these CSVs from the published GLI workbook.
+Its oracle grid was calculated independently with rspiro (30 demographic cases).
+Our runtime does not execute or require R, pft, rspiro, or a remote service.
+Original CSV SHA256 hashes: docs/gli-global-sources.json in the source project.
+
+pft is distributed under the MIT license:
+Copyright (c) 2024 Pat Johnson
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+GLI 2021 static lung volumes (VC, IC, ERV):
+Hall GL, Filipow N, Ruppel G, et al. ERJ 2021;57:2000289.
+https://doi.org/10.1183/13993003.00289-2020
+Spline tables transcribed from pft data-raw/splines_lung.RData at the same
+MIT-licensed commit above. Source SHA256:
+9acca95c978310a6b90000719ba3d6822c47ecf6390f10666864835c5712dde5
+Extraction and validation: docs/gli-volumes-sources.md.
