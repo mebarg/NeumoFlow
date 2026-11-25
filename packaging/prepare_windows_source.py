@@ -5,22 +5,24 @@ from pathlib import Path
 from zipfile import ZipFile, ZIP_DEFLATED
 
 ROOT=Path(__file__).resolve().parent.parent
+SOURCE_FOLDER='NeumoFlow-Windows'
 
 
 def build_archive(root=ROOT, destination=None):
     root=Path(root)
-    destination=Path(destination or root/'dist-installer/Espirometro-Fuentes-Windows-x64.zip')
+    destination=Path(destination or root/'dist-installer/NeumoFlow-Fuentes-Windows-x64.zip')
     files={p.relative_to(root).as_posix():p for p in (root/'app').rglob('*.py') if '__pycache__' not in p.parts}
     files.update({p.relative_to(root).as_posix():p for p in (root/'tests').glob('test_*.py')})
     files.update({p.relative_to(root).as_posix():p for p in (root/'app/data/icons').glob('*.svg')})
     files.update({p.relative_to(root).as_posix():p for p in (root/'app/data/brand').glob('*') if p.suffix in ('.svg','.png','.ico')})
-    for name in ('requirements.txt','requirements-build.txt','app/data/lup1.cfg',
+    for name in ('README.md','requirements.txt','requirements-build.txt','app/data/lup1.cfg',
                  'tests/fixtures/wfa_low_flow.json.gz','tests/fixtures/gli_2022_oracle.csv','tests/fixtures/gli_volumes_2021_oracle.csv',
                  'app/data/gli_global_2022.json','app/data/gli_volumes_2021.json','app/data/GLI-NOTICE.txt','packaging/README.md',
                  'packaging/espirometro.spec','packaging/espirometro.iss',
                  'packaging/constraints-windows.txt','packaging/build-windows.ps1',
                  'packaging/crear-instalador.cmd','packaging/usb-windows.html',
-                 'packaging/defaults/calibracion.json','packaging/prepare_windows_source.py'):
+                 'packaging/defaults/calibracion.json','packaging/prepare_windows_source.py',
+                 'packaging/release_metadata.py'):
         files[name]=root/name
     for name in ('packaging/check_usb_bundle.py','packaging/windows-usb/README.md'):
         files[name]=root/name
@@ -41,9 +43,9 @@ def build_archive(root=ROOT, destination=None):
     with ZipFile(destination,'w',ZIP_DEFLATED) as archive:
         for name,path in sorted(files.items()):
             data=path.read_bytes()
-            archive.writestr('Espirometro-Windows/'+name,data)
+            archive.writestr(SOURCE_FOLDER+'/'+name,data)
             manifest[name]=hashlib.sha256(data).hexdigest()
-        archive.writestr('Espirometro-Windows/source-manifest.json',json.dumps(manifest,indent=2))
+        archive.writestr(SOURCE_FOLDER+'/source-manifest.json',json.dumps(manifest,indent=2))
     return destination,manifest
 
 

@@ -1,0 +1,3 @@
+#!/bin/sh
+# Los datos se guardan en el directorio del usuario, nunca en /opt.
+exec /opt/neumoflow/NeumoFlow "$@"

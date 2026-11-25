@@ -17,6 +17,22 @@ ROOT=Path(__file__).resolve().parent.parent
 
 
 class WindowsPackagingTests(unittest.TestCase):
+    def test_brand_upgrade_preserves_install_identity_and_user_data(self):
+        from app import paths
+        script=(ROOT/'packaging/espirometro.iss').read_text(encoding='utf-8')
+        self.assertIn('AppId={{A23C4D66-70B7-43D5-A445-5B8BD7A4B6B4}',script)
+        self.assertIn('UsePreviousAppDir=yes',script)
+        self.assertNotIn('[UninstallDelete]',script)
+        deletions=script.split('[InstallDelete]',1)[1].split('[Run]',1)[0]
+        for line in deletions.splitlines():
+            if line.startswith('Type:'):
+                self.assertTrue(line.startswith('Type: files;'))
+                self.assertIn('Check: IsLegacyUpgrade',line)
+                self.assertNotIn('appdata',line.lower())
+                self.assertNotIn('*',line)
+        with patch.object(paths.sys,'platform','win32'),patch.dict(os.environ,{'LOCALAPPDATA':'C:/NeumoFlow-test-data'}):
+            self.assertEqual(paths.user_data_dir(),Path('C:/NeumoFlow-test-data')/'Espirometro')
+
     def test_brand_png_and_every_windows_icon_size_have_transparent_corners(self):
         import struct
         from PySide6.QtGui import QImage
@@ -66,7 +82,7 @@ class WindowsPackagingTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             output,manifest=module.build_archive(destination=Path(tmp)/'sources.zip')
             with ZipFile(output) as archive:
-                prefix='Espirometro-Windows/'
+                prefix='NeumoFlow-Windows/'
                 self.assertEqual(archive.testzip(),None)
                 names=archive.namelist()
                 self.assertTrue(all(n.startswith(prefix) for n in names))
@@ -95,11 +111,16 @@ class WindowsPackagingTests(unittest.TestCase):
             report=Path(tmp)/'check.json'
             self.assertEqual(run(report),0)
             self.assertTrue(json.loads(report.read_text())['libusb_library_loaded'])
+            self.assertTrue(json.loads(report.read_text())['qt_fonts'])
             with patch.object(spirometry,'find_libusb_package_library',return_value=None):
                 self.assertEqual(run(report),1)
             failed=json.loads(report.read_text())
             self.assertFalse(failed['ok'])
             self.assertIn('Falta la biblioteca libusb',failed['error'])
+            with patch('PySide6.QtGui.QRawFont.fromFont') as font:
+                font.return_value.isValid.return_value=False
+                self.assertEqual(run(report),1)
+            self.assertIn('Qt no pudo cargar fuentes',json.loads(report.read_text())['error'])
 
 
 if __name__=='__main__':unittest.main()

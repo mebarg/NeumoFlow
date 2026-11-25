@@ -1,4 +1,5 @@
 # Versiones principales usadas para preparar esta distribución Windows x64.
+pyinstaller==6.22.3
 PySide6==6.11.1
 pyspiro==0.3.7
 pyusb==1.3.1

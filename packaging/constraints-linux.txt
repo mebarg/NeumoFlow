@@ -1,0 +1,5 @@
+# Qt 6.8: evita elevar involuntariamente la base Linux al construir en Mint 21/22.
+# Construir en Ubuntu 22.04/Mint 21 si se necesita soportar ambas generaciones.
+PySide6==6.8.3
+# Misma implementación de referencias que la validada en la aplicación/Windows.
+pyspiro==0.3.7

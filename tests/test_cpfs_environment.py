@@ -7,6 +7,7 @@ import tempfile
 import struct
 import unittest
 from unittest.mock import patch
+from test_support import working_directory
 
 from app.cpfs_environment import measurement_environment, annotate_sample
 from app.cpfs_signal import FlowSample, FlowProcessor, StreamSession
@@ -62,7 +63,7 @@ class EnvironmentTests(unittest.TestCase):
         self.assertEqual(p['environment'],e)
         curve=sp.calcular_curva_parcial(samples)
         self.assertAlmostEqual(max(v for t,v,f in curve),p['fvc'],places=11)
-        with tempfile.TemporaryDirectory() as tmp, contextlib.chdir(tmp), \
+        with tempfile.TemporaryDirectory() as tmp, working_directory(tmp), \
                 patch.object(sp,'guardar_curvas_html'),patch.object(sp,'curva_ascii'), \
                 contextlib.redirect_stdout(io.StringIO()):
             sp.mostrar_resultados(samples)

@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, copy_metadata
 
 
 root = Path(SPECPATH).resolve().parent
@@ -19,6 +19,9 @@ datas = [
 ] + [(str(path), "app/data/icons") for path in (root / "app/data/icons").glob("*.svg")] + collect_data_files("pyspiro")
 
 binaries = collect_dynamic_libs("libusb_package")
+for distribution in ('PySide6', 'PySide6-Essentials', 'PySide6-Addons', 'shiboken6',
+                     'pyusb', 'pyserial', 'pyspiro', 'numpy', 'pandas', 'libusb-package'):
+    datas += copy_metadata(distribution)
 
 
 a = Analysis(
@@ -40,7 +43,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="Espirometro",
+    name="NeumoFlow",
     icon=str(root / "app/data/brand/neumoflow.ico"),
     debug=False,
     bootloader_ignore_signals=False,
@@ -62,5 +65,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="Espirometro",
+    name="NeumoFlow",
 )

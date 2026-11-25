@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=NeumoFlow
+GenericName=Espirometría
+Comment=Mediciones respiratorias e informes de espirometría
+Exec=neumoflow
+Icon=neumoflow
+Terminal=false
+Categories=Science;MedicalSoftware;
+StartupNotify=true
+StartupWMClass=NeumoFlow

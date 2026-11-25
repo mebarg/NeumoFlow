@@ -21,7 +21,9 @@ python -m app.main
 En Windows, consultar [las instrucciones de empaquetado](packaging/README.md).
 El instalador Windows incluye la preparación del dispositivo USB; su prueba en
 una instalación limpia sigue pendiente según la documentación del paquete.
-El repositorio todavía no incluye un instalador específico para Linux Mint.
+Para Linux Mint 21.2 Victoria x64, consultar [el generador de paquetes DEB](packaging/linux/README.md).
+La compilación debe realizarse en Mint 21.x o Ubuntu 22.04; las pruebas del
+instalador con escritorio y USB en Mint siguen pendientes.
 
 ## Datos y calibración
 
@@ -55,6 +57,7 @@ validación clínica o regulatoria del equipo.
 - [Tabla FVC](docs/tabla-etapas-fvc.md).
 - [Historial y tendencias](docs/tendencia-paciente.md).
 - [Instalador Windows](packaging/README.md).
+- [Publicación automática de instaladores en GitHub](docs/publicar-versiones.md).
 
 ## Recursos de terceros
 

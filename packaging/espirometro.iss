@@ -1,18 +1,23 @@
-#define MyAppName "Espirometro"
-#define MyAppVersion "1.0.0"
-#define MyAppPublisher "Espirometro"
-#define MyAppExeName "Espirometro.exe"
+#define MyAppName "NeumoFlow"
+#ifndef MyAppVersion
+#define MyAppVersion "1.0.2"
+#endif
+#define MyAppPublisher "NeumoFlow"
+#define MyAppExeName "NeumoFlow.exe"
 
 [Setup]
 AppId={{A23C4D66-70B7-43D5-A445-5B8BD7A4B6B4}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
+UninstallDisplayIcon={app}\{#MyAppExeName}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
+UsePreviousAppDir=yes
+UsePreviousGroup=no
 DisableProgramGroupPage=yes
 OutputDir=..\dist-installer
-OutputBaseFilename=EspirometroSetup-{#MyAppVersion}
+OutputBaseFilename=NeumoFlowSetup-{#MyAppVersion}
 MinVersion=10.0.17763
 PrivilegesRequired=admin
 DisableDirPage=yes
@@ -28,26 +33,51 @@ ArchitecturesInstallIn64BitMode=x64os
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 
 [Files]
-Source: "..\dist\Espirometro\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\NeumoFlow\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "usb-windows.html"; DestDir: "{app}"; Flags: ignoreversion
 Source: "windows-usb\package\*"; DestDir: "{app}\usb-setup\package"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "setup-usb-windows.ps1"; DestDir: "{app}\usb-setup"; Flags: ignoreversion
 Source: "windows-usb\README.md"; DestDir: "{app}\usb-setup"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+
+[InstallDelete]
+; Only clean up our old program/shortcuts when the previous AppId is installed.
+; Never remove the user data directory or use recursive deletion here.
+Type: files; Name: "{app}\Espirometro.exe"; Check: IsLegacyUpgrade
+Type: files; Name: "{autodesktop}\Espirometro.lnk"; Check: IsLegacyUpgrade
+Type: files; Name: "{commonprograms}\Espirometro\Espirometro.lnk"; Check: IsLegacyUpgrade
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Abrir {#MyAppName}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [Messages]
 WelcomeLabel2=Este asistente instalará el programa y preparará la conexión con el espirómetro. No necesita configurar controladores por separado.%n%nPuede conectar el espirómetro ahora o al terminar la instalación.
-FinishedLabel=La instalación terminó. Conecte el espirómetro y abra el acceso directo Espirometro del escritorio. Realice la calibración antes del primer estudio.
+FinishedLabel=La instalación terminó. Conecte el espirómetro y abra el acceso directo NeumoFlow del escritorio. Realice la calibración antes del primer estudio.
 
 [Code]
 var
   DriverRestartRequired: Boolean;
+  LegacyUpgrade: Boolean;
+
+function InitializeSetup(): Boolean;
+var
+  PreviousName: String;
+begin
+  LegacyUpgrade := False;
+  if RegQueryStringValue(HKLM64,
+    'Software\Microsoft\Windows\CurrentVersion\Uninstall\{A23C4D66-70B7-43D5-A445-5B8BD7A4B6B4}_is1',
+    'DisplayName', PreviousName) then
+    LegacyUpgrade := Pos('Espirometro', PreviousName) = 1;
+  Result := True;
+end;
+
+function IsLegacyUpgrade(): Boolean;
+begin
+  Result := LegacyUpgrade;
+end;
 
 function NeedRestart(): Boolean;
 begin

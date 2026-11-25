@@ -9,10 +9,16 @@ def run(report_path):
     result={'ok':False}
     try:
         from PySide6.QtWidgets import QApplication, QWidget
+        from PySide6.QtGui import QRawFont
         from app.cpfs_signal import default_table, TABLE_SHA256
         from app.reference_values import gli2012_for_maneuver
         from app.spirometry import find_libusb_package_library
         q=QApplication.instance() or QApplication([])
+        font=QRawFont.fromFont(q.font())
+        assert font.isValid(), (
+            'Qt no pudo cargar fuentes del sistema. En Windows usar '
+            'QT_QPA_PLATFORM=windows; el modo offscreen puede carecer de fuentes.'
+        )
         widget=QWidget()
         widget.resize(64,64)
         assert not widget.grab().isNull(), 'Qt no pudo dibujar'
@@ -35,7 +41,9 @@ def run(report_path):
         assert library, 'Falta la biblioteca libusb incluida'
         loaded=ctypes.CDLL(library)
         assert loaded.libusb_init and loaded.libusb_get_device_list, 'Biblioteca USB incorrecta'
-        result.update(ok=True,qt=True,gli=True,gli_global=True,gli_volumes=True,libusb_library_loaded=True,table_sha256=TABLE_SHA256)
+        result.update(ok=True,qt=True,qt_fonts=True,qt_platform=q.platformName(),
+                      font_family=font.familyName(),gli=True,gli_global=True,
+                      gli_volumes=True,libusb_library_loaded=True,table_sha256=TABLE_SHA256)
     except Exception:
         result['error']=traceback.format_exc()
     Path(report_path).write_text(json.dumps(result,indent=2),encoding='utf-8')

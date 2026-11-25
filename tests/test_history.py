@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 from app import db
 from app.history import patient_history, fvc_summary
+from test_support import loaded_pdf
 
 
 class HistoryTests(unittest.TestCase):
@@ -174,7 +175,6 @@ class HistoryTests(unittest.TestCase):
     def test_history_pdf_uses_selected_studies_phases_graphs_and_configured_patient_header(self):
         from PySide6.QtCore import QThread, Qt
         from PySide6.QtWidgets import QApplication
-        from PySide6.QtPdf import QPdfDocument
         from app.main_window import MainWindow
         qt=QApplication.instance() or QApplication([])
         ids=[self.visit(date) for date in ('2019-03-12T10:30:00','2021-03-12T10:30:00','2023-03-12T10:30:00')]
@@ -200,13 +200,12 @@ class HistoryTests(unittest.TestCase):
                 old_targets=list(page.charts[0].targets)
                 output=Path(self.tmp.name)/'trend.pdf';self.assertTrue(w.export_history_pdf(output))
                 self.assertEqual(old_targets,page.charts[0].targets)
-                doc=QPdfDocument();self.assertEqual(doc.load(str(output)),QPdfDocument.Error.None_)
-                text='\n'.join(doc.getAllText(i).text() for i in range(doc.pageCount()))
-                self.assertGreater(doc.pagePointSize(0).width(),doc.pagePointSize(0).height())
-                for value in ('Centro de Pruebas NeumoFlow','Sintético Paciente','01/01/1980','12/03/2019','12/03/2023','Femenino','FEV1/FVC'):
-                    self.assertIn(value,text)
-                self.assertNotIn('12/03/2021',text);self.assertNotIn('POST',text)
-                doc.close()
+                with loaded_pdf(output) as doc:
+                    text='\n'.join(doc.getAllText(i).text() for i in range(doc.pageCount()))
+                    self.assertGreater(doc.pagePointSize(0).width(),doc.pagePointSize(0).height())
+                    for value in ('Centro de Pruebas NeumoFlow','Sintético Paciente','01/01/1980','12/03/2019','12/03/2023','Femenino','FEV1/FVC'):
+                        self.assertIn(value,text)
+                    self.assertNotIn('12/03/2021',text);self.assertNotIn('POST',text)
                 for row in (0,4):page.table.item(row,0).setCheckState(Qt.Unchecked)
                 self.assertFalse(page.pdf_button.isEnabled());self.assertFalse(page.print_button.isEnabled())
                 self.assertIsNone(w._history_report_payload())
@@ -217,7 +216,6 @@ class HistoryTests(unittest.TestCase):
     def test_long_history_pdf_paginates_with_patient_and_custom_header_on_each_paper(self):
         from PySide6.QtCore import QThread
         from PySide6.QtWidgets import QApplication
-        from PySide6.QtPdf import QPdfDocument
         from app.main_window import MainWindow
         qt=QApplication.instance() or QApplication([])
         for year in range(1990,2020):
@@ -232,13 +230,13 @@ class HistoryTests(unittest.TestCase):
                 for paper in ('A4','Letter','Legal'):
                     db.set_setting('report_paper_size',paper)
                     output=Path(self.tmp.name)/f'trend-{paper}.pdf';w.export_history_pdf(output)
-                    doc=QPdfDocument();self.assertEqual(doc.load(str(output)),QPdfDocument.Error.None_)
-                    self.assertGreater(doc.pageCount(),1)
-                    texts=[doc.getAllText(i).text() for i in range(doc.pageCount())]
-                    for text in texts:
-                        self.assertIn('Encabezado de seguimiento',text);self.assertIn('Sintético Paciente',text)
-                        self.assertIn('01/01/1980',text)
-                    text='\n'.join(texts)
-                    for year in range(1990,2020):self.assertIn(f'17/04/{year}',text)
-                    self.assertIn('Evolución',texts[-1]);doc.close()
+                    with loaded_pdf(output) as doc:
+                        self.assertGreater(doc.pageCount(),1)
+                        texts=[doc.getAllText(i).text() for i in range(doc.pageCount())]
+                        for text in texts:
+                            self.assertIn('Encabezado de seguimiento',text);self.assertIn('Sintético Paciente',text)
+                            self.assertIn('01/01/1980',text)
+                        text='\n'.join(texts)
+                        for year in range(1990,2020):self.assertIn(f'17/04/{year}',text)
+                        self.assertIn('Evolución',texts[-1])
             finally:w.close()

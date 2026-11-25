@@ -8,6 +8,7 @@
 !/app/
 !/tests/
 !/packaging/
+!/.github/
 !/tools/
 !/docs/
 
@@ -18,6 +19,9 @@
 packaging/windows-status.json
 packaging/innosetup-*.exe
 packaging/windows-usb/exported/
+build/
+dist/
+dist-installer/
 
 # Datos de pacientes, exportaciones y registros locales
 *.db
@@ -59,3 +63,5 @@ packaging/windows-usb/exported/
 /tools/*
 !/tools/build_brand_assets.py
 !/tools/build_gli_volumes_data.py
+
+!/docs/publicar-versiones.md

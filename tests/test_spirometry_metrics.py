@@ -6,6 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+from test_support import working_directory
 
 from app import db, spirometry as s
 from app.cpfs_signal import FlowSample
@@ -97,7 +98,7 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(p['metrics_version'],s.METRICS_VERSION)
         with tempfile.TemporaryDirectory() as tmp, patch.object(s,'_btps',1.5), \
                 patch.object(s,'guardar_curvas_html'), \
-                patch.object(s,'curva_ascii'), contextlib.chdir(tmp):
+                patch.object(s,'curva_ascii'), working_directory(tmp):
             # Exercise the CLI formatter and its export in an isolated directory.
             output=io.StringIO()
             with contextlib.redirect_stdout(output):
