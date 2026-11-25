@@ -3,9 +3,11 @@ $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent $PSScriptRoot
 if ($env:OS -ne "Windows_NT") { throw "Este script debe ejecutarse en Windows x64." }
 $savedEnvironment = @{}
-foreach ($name in @("LOCALAPPDATA", "APPDATA", "XDG_DATA_HOME", "QT_QPA_PLATFORM")) {
+foreach ($name in @("LOCALAPPDATA", "APPDATA", "XDG_DATA_HOME", "QT_QPA_PLATFORM", "PYTHONUTF8", "PYTHONIOENCODING")) {
     $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, "Process")
 }
+$savedConsoleEncoding = [Console]::OutputEncoding
+$savedOutputEncoding = $OutputEncoding
 
 function Invoke-Checked {
     param([string]$Exe, [string[]]$Arguments)
@@ -15,6 +17,12 @@ function Invoke-Checked {
 
 Push-Location $repo
 try {
+    # Redirected Python output on Windows otherwise defaults to cp1252, which
+    # cannot encode the arrows printed by the acquisition diagnostics.
+    $env:PYTHONUTF8 = "1"
+    $env:PYTHONIOENCODING = "utf-8"
+    [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+    $OutputEncoding = [Console]::OutputEncoding
     $versionLine = Select-String -Path "packaging\espirometro.iss" -Pattern '^#define MyAppVersion "([0-9.]+)"$'
     if (-not $versionLine) { throw "No se pudo leer la version del instalador." }
     $appVersion = $versionLine.Matches[0].Groups[1].Value
@@ -113,5 +121,7 @@ try {
     foreach ($name in $savedEnvironment.Keys) {
         [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name], "Process")
     }
+    [Console]::OutputEncoding = $savedConsoleEncoding
+    $OutputEncoding = $savedOutputEncoding
     Pop-Location
 }
