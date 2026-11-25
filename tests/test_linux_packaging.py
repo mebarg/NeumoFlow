@@ -112,6 +112,7 @@ class LinuxPackagingTests(unittest.TestCase):
                 text = control.extractfile('control').read().decode()
                 self.assertIn('Architecture: amd64\n', text)
                 self.assertIn('libc6 (>= 2.35)', text)
+                self.assertIn('libatomic1', text)
                 self.assertNotIn('python3', text)
                 self.assertEqual(control.getmember('postinst').mode, 0o755)
                 removal = control.extractfile('postrm').read().decode()

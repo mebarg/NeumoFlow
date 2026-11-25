@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 VERSION = '1.0.2'
 TARGET_GLIBC = (2, 35)
 DEPENDENCIES = (
-    'libc6 (>= 2.35), libstdc++6, libgcc-s1, libusb-1.0-0, '
+    'libc6 (>= 2.35), libstdc++6, libgcc-s1, libatomic1, libusb-1.0-0, '
     'libglib2.0-0, libdbus-1-3, libfontconfig1, libfreetype6, '
     'libx11-6, libx11-xcb1, libxext6, libxfixes3, libxi6, libxrender1, '
     'libxkbcommon0, libxkbcommon-x11-0, libxcb1, libxcb-cursor0, '

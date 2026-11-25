@@ -45,7 +45,10 @@ archivos existentes. No mover etiquetas publicadas: corregir y sacar otra versi�
 Windows compila en un runner Windows 2022 con Python 3.12 x64, las dependencias
 fijadas en `constraints-windows.txt` e Inno Setup 6.7.3 verificado mediante SHA256.
 En el runner temporal se confía en el certificado público del paquete USB después
-de comprobar sus hashes; no se instala el controlador ni se accede al espirómetro.
+de comprobar sus hashes. Se usa `certutil` sobre LocalMachine del runner temporal
+para evitar el aviso interactivo de CurrentUser\Root, con un límite de tres minutos.
+No se instala el controlador ni se accede al espirómetro. Las pruebas muestran
+el nombre de cada caso para poder identificar una demora.
 El instalador resultante no tiene firma de editor del ejecutable.
 
 Linux compila con Python 3.10 dentro de Ubuntu 22.04, sobre un runner Ubuntu 24.04.

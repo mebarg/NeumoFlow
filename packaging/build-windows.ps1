@@ -70,17 +70,21 @@ try {
     $env:QT_QPA_PLATFORM = "windows"
     $sourceReport = Join-Path $repo "build\windows-source-self-test.json"
     if (Test-Path $sourceReport) { Remove-Item $sourceReport }
+    Write-Host "Comprobando arranque, fuentes y recursos..."
     & $python -m app.main --self-test $sourceReport
     if ($LASTEXITCODE -ne 0) {
         if (Test-Path $sourceReport) { Get-Content $sourceReport -Raw | Write-Host }
         throw "Fallo la comprobacion inicial de Qt, fuentes o recursos. Revisar $sourceReport"
     }
-    Invoke-Checked $python @("-m", "unittest", "discover", "-s", "tests", "-q")
+    Write-Host "Ejecutando pruebas: se muestra el nombre de cada prueba."
+    Invoke-Checked $python @("-u", "-m", "unittest", "discover", "-s", "tests", "-v")
+    Write-Host "Pruebas terminadas. Generando ejecutable con PyInstaller..."
     Invoke-Checked $python @("-m", "PyInstaller", "--clean", "--noconfirm", "packaging\espirometro.spec")
 
     $report = Join-Path $repo "build\windows-self-test.json"
     if (Test-Path $report) { Remove-Item $report }
     $exe = Join-Path $repo "dist\NeumoFlow\NeumoFlow.exe"
+    Write-Host "Comprobando el ejecutable generado..."
     $process = Start-Process -FilePath $exe -ArgumentList @("--self-test", "`"$report`"") -Wait -PassThru
     if ($process.ExitCode -ne 0 -or -not (Test-Path $report)) {
         throw "El ejecutable no paso la comprobacion de arranque. Revisar $report"
@@ -98,6 +102,7 @@ try {
         return
     }
 
+    Write-Host "Generando instalador con Inno Setup..."
     Invoke-Checked $InnoCompiler @("/DMyAppVersion=$appVersion", "packaging\espirometro.iss")
     if (-not (Test-Path $installer)) { throw "El compilador termino sin generar $installer." }
     $hash = Get-FileHash -Algorithm SHA256 $installer

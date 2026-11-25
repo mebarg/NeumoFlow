@@ -40,7 +40,7 @@ En Mint, preparar las herramientas una vez:
 
 ```bash
 sudo apt update
-sudo apt install python3-venv python3-pip python3-dev binutils libusb-1.0-0 libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0
+sudo apt install python3-venv python3-pip python3-dev binutils libatomic1 libusb-1.0-0 libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0
 ```
 
 Extraer `NeumoFlow-Fuentes-Linux-Mint21-x64.tar.gz` y, desde su carpeta
