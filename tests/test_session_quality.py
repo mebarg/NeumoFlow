@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QApplication
 from app import db
 from app.session_quality import session_feedback
 from test_fvc_quality import curve_params
+from test_support import layout_test_desktop
 
 
 def row(fvc=4., fev1=3., phase='pre', artifact=None):
@@ -87,6 +88,7 @@ class SessionQualityUiTests(unittest.TestCase):
         from app.main_window import MainWindow
         with TemporaryDirectory() as tmp,patch.object(db,'DB_PATH',Path(tmp)/'test.db'),patch.object(QThread,'start'):
             w=MainWindow()
+            desktop=layout_test_desktop(w)
             try:
                 pid=db.create_patient('Prueba','Sesión',birth_date='1980-01-01',no_btps=True)
                 sid=db.create_session(pid)
@@ -109,4 +111,6 @@ class SessionQualityUiTests(unittest.TestCase):
                 w.set_study_phase('post')
                 self.assertEqual(w.session_quality_label.property('state'),'empty')
                 self.assertEqual(w.size().toTuple(),(1366,690))
-            finally:w.close()
+            finally:
+                w.close()
+                desktop.close()

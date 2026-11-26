@@ -9,6 +9,7 @@ from PySide6.QtCore import QPoint, QThread, Qt
 from PySide6.QtWidgets import QApplication
 from app import db
 from app.main_window import MainWindow
+from test_support import layout_test_desktop
 
 
 class ModernUiTests(TestCase):
@@ -82,6 +83,12 @@ class ModernUiTests(TestCase):
     def test_small_display_keeps_capture_controls_and_scrollable_content_reachable(self):
         from PySide6.QtWidgets import QScrollArea, QTabWidget
         w = self.window
+        desktop = layout_test_desktop(w)
+        def close_desktop():
+            w.close()
+            w.setParent(None)
+            desktop.close()
+        self.addCleanup(close_desktop)
         # Allow for the taskbar and frame on a 1366x768 monitor.
         w.resize(1366, 690)
         w.show()
