@@ -213,6 +213,12 @@ def validate(study):
                 if not isinstance(point, list) or len(point) != 3 or not all(_numeric(x) for x in point) or point[0] < last:
                     raise TransferError('Curva con tiempos o valores inválidos')
                 last = point[0]
+        if 'quality_version' in params:
+            from app.fvc_quality import validate_quality
+            try:
+                validate_quality(params)
+            except (ValueError, TypeError) as exc:
+                raise TransferError(str(exc)) from exc
     return study
 
 

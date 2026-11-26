@@ -80,7 +80,7 @@ class HistoryTests(unittest.TestCase):
                 w.current_patient_id=self.pid;w.show_patient_detail();w.patient_history_tabs.setCurrentIndex(1)
                 w.resize(1024,768);w.show();qt.processEvents()
                 page=w.history_page
-                self.assertEqual(w.page_caption.text(),'Pacientes / Tendencia')
+                self.assertTrue(w.patients_button.isChecked())
                 self.assertLessEqual(w.minimumSizeHint().width(),1024);self.assertLessEqual(w.minimumSizeHint().height(),768)
                 self.assertEqual(page.table.rowCount(),4)
                 chart=page.charts[0];self.assertEqual(len(chart.targets),3)

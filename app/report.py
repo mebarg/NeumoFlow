@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from app.plot_markers import draw_zscore_marker
+
 from PySide6.QtCore import QSizeF, QRectF, Qt
 from PySide6.QtGui import QAbstractTextDocumentLayout, QColor, QFont, QFontMetrics, QImage, QPainter, QPalette, QPen, QTextDocument
 
@@ -230,20 +232,14 @@ class SpirometryReportRenderer:
             painter.setPen(QPen(QColor("#d1d5db"), 1))
             painter.drawLine(chart_x, cy, chart_x + chart_w, cy)
             if pre is not None:
-                painter.setBrush(QColor("#2563eb"))
-                painter.setPen(Qt.NoPen)
-                painter.drawEllipse(map_x(pre) - self._u(3), cy - self._u(3), self._u(6), self._u(6))
+                draw_zscore_marker(painter, map_x(pre), cy, self._u(3), 'pre')
             if post is not None:
-                painter.setBrush(QColor("#dc2626"))
-                painter.setPen(Qt.NoPen)
-                painter.drawEllipse(map_x(post) - self._u(3), cy - self._u(3), self._u(6), self._u(6))
+                draw_zscore_marker(painter, map_x(post), cy, self._u(3), 'post')
         painter.setBrush(Qt.NoBrush)
         painter.setPen(QColor("#374151"))
         legend_y = y + row_h * len(rows) + self._u(4)
-        painter.setBrush(QColor("#2563eb"))
-        painter.drawEllipse(chart_x, legend_y, self._u(6), self._u(6))
-        painter.setBrush(QColor("#dc2626"))
-        painter.drawEllipse(chart_x + self._u(40), legend_y, self._u(6), self._u(6))
+        draw_zscore_marker(painter, chart_x + self._u(3), legend_y + self._u(3), self._u(3), 'pre')
+        draw_zscore_marker(painter, chart_x + self._u(43), legend_y + self._u(3), self._u(3), 'post')
         painter.setBrush(Qt.NoBrush)
         painter.drawText(QRectF(chart_x + self._u(10), legend_y - self._u(4), self._u(28), self._u(12)), Qt.AlignLeft, "PRE")
         painter.drawText(QRectF(chart_x + self._u(50), legend_y - self._u(4), self._u(34), self._u(12)), Qt.AlignLeft, "POST")

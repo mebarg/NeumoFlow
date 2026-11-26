@@ -6,6 +6,13 @@ Incluye mediciones FVC, SVC y MVV, estudios PRE/POST, historial y tendencias,
 referencias configurables por parámetro, informes PDF e importación de estudios
 BreezeSuite `.cow`. Los estudios propios se intercambian mediante `.espiro`.
 
+La interfaz se adapta a pantallas de 1366×768, con desplazamiento en el sumario,
+la configuración y las tendencias cuando falta altura. En los gráficos de
+z-score, PRE usa círculos rellenos y POST círculos de contorno, también al imprimir.
+
+Las capturas FVC incluyen una [revisión orientativa de calidad por parámetro](docs/tabla-etapas-fvc.md#revisión-de-calidad-por-parámetro),
+con tramos sospechosos marcados y decisiones de confirmar/descartar guardadas por el operador.
+
 ## Ejecutar desde las fuentes
 
 Crear un entorno con Python compatible con las dependencias (Python 3.12 de
@@ -17,6 +24,11 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 python -m app.main
 ```
+
+Para probar una ventana sin maximizar: `python -m app.main --window-size 1366x768`.
+El tamaño corresponde al área interior de la aplicación. Para simular el espacio
+útil de un monitor de 1366×768 dejando lugar al marco y la barra de tareas, usar
+`python -m app.main --window-size 1366x690`.
 
 En Windows, consultar [las instrucciones de empaquetado](packaging/README.md).
 El instalador Windows incluye la preparación del dispositivo USB; su prueba en

@@ -415,3 +415,21 @@ def include_respiratory_measurement(measurement_id, included):
 def delete_respiratory_measurement(measurement_id):
     with connect() as conn:
         conn.execute('DELETE FROM respiratory_measurements WHERE id=?',(measurement_id,))
+
+
+def review_maneuver_quality(maneuver_id, expected_params, decisions):
+    """Persist only operator quality decisions; do not rewrite measured values/curves."""
+    from app.fvc_quality import apply_decisions, validate_quality
+    validate_quality(expected_params)
+    with connect() as conn:
+        row = conn.execute('SELECT processing_json FROM maneuvers WHERE id=?', (maneuver_id,)).fetchone()
+        if row is None:
+            raise ValueError('Maniobra no encontrada')
+        stored = json.loads(row['processing_json'] or '{}')
+        from app.fvc_quality import annotate
+        current = stored if stored.get('quality_version') == 1 else annotate(stored)
+        if current != json.loads(json.dumps(expected_params)):
+            raise ValueError('La evaluación cambió. Volvé a abrir la revisión de calidad.')
+        updated = apply_decisions(current, decisions, datetime.now().isoformat(timespec='seconds'))
+        conn.execute('UPDATE maneuvers SET processing_json=?, quality_errors_json=? WHERE id=?',
+                     (json.dumps(updated), json.dumps(updated['calidad_errores']), maneuver_id))

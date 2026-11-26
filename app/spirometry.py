@@ -884,34 +884,6 @@ def calcular_parametros(muestras, umbral_inicio=5000, environment=None):
         else:
             pausa_muestras = 0
 
-    tos_detectada = False
-    cierre_glotico = False
-    flujos_curva = flujos_activos
-    ventana_corta = max(1, int(0.15 / DT))
-    ventana_persistencia = max(1, int(0.30 / DT))
-    umbral_casi_cero = max(0.10, pef * 0.05)
-    caida_relevante = max(0.50, pef * 0.20)
-
-    limite_tos = min(len(flujos_curva) - (2 * ventana_corta), int(1.0 / DT))
-    for i in range(ventana_corta, max(ventana_corta, limite_tos)):
-        prev_peak = max(flujos_curva[max(0, i - ventana_corta):i])
-        local_low = min(flujos_curva[i:i + ventana_corta])
-        next_peak = max(flujos_curva[i + ventana_corta:i + (2 * ventana_corta)])
-        if prev_peak - local_low >= caida_relevante and next_peak - local_low >= caida_relevante:
-            tos_detectada = True
-            break
-
-    for i in range(ventana_corta, len(flujos_curva) - ventana_persistencia):
-        prev_peak = max(flujos_curva[max(0, i - ventana_corta):i])
-        after = flujos_curva[i:i + ventana_persistencia]
-        if (
-            prev_peak >= caida_relevante
-            and prev_peak - flujos_curva[i] >= caida_relevante
-            and max(after) <= umbral_casi_cero
-        ):
-            cierre_glotico = True
-            break
-
     calidad_errores = []
     # Clock coverage belongs to the full recording. Expiration may finish
     # before one second while acquisition continues through the final rest.
@@ -925,10 +897,6 @@ def calcular_parametros(muestras, umbral_inicio=5000, environment=None):
         calidad_errores.append("Duracion <0.5 s")
     if flujo_interrumpido:
         calidad_errores.append("Espiracion interrumpida")
-    if tos_detectada:
-        calidad_errores.append("Tos")
-    if cierre_glotico:
-        calidad_errores.append("Cierre glotico")
     if not meseta_eofe:
         calidad_errores.append("Sin meseta")
 
@@ -942,7 +910,8 @@ def calcular_parametros(muestras, umbral_inicio=5000, environment=None):
         if t25 is not None and t75 is not None and t75 > t25:
             fef2575 = (v75 - v25) / (t75 - t25)
 
-    return {
+    from app.fvc_quality import annotate
+    return annotate({
         "metrics_version": METRICS_VERSION,
         "environment": (environment if environment is not None else
                         getattr(muestras[0], 'environment', contexto_ambiental_medicion())),
@@ -963,12 +932,10 @@ def calcular_parametros(muestras, umbral_inicio=5000, environment=None):
         "delta_ultimo_s": delta_ultimo_s,
         "meseta_eofe": meseta_eofe,
         "flujo_interrumpido": flujo_interrumpido,
-        "tos_detectada": tos_detectada,
-        "cierre_glotico": cierre_glotico,
         "calidad_errores": calidad_errores,
         "vol_curve":   vol_curve,
         "acq_curve":   calcular_curva_parcial(muestras, umbral_inicio),
-    }
+    })
 
 
 def calcular_curva_parcial(muestras, umbral_inicio=5000):

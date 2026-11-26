@@ -150,7 +150,8 @@ class HistoryPage(QWidget):
             chart=TrendChart(key);chart.selected.connect(self.select_point);self.charts.append(chart)
             combo.currentIndexChanged.connect(lambda _,c=combo,g=chart:self.change_metric(g,c.currentData()))
             row=QHBoxLayout();combo.setFixedWidth(125);row.addWidget(combo);row.addWidget(chart,1);gl.addLayout(row,1)
-        splitter.addWidget(graphs);splitter.setSizes([180,380]);splitter.setCollapsible(0,False);splitter.setCollapsible(1,False)
+        self.graph_scroll=window._scroll_content(graphs)
+        splitter.addWidget(self.graph_scroll);splitter.setSizes([180,380]);splitter.setCollapsible(0,False);splitter.setCollapsible(1,False)
         layout.addWidget(splitter,1)
         self.status=QLabel();self.status.setWordWrap(True);self.status.setProperty('role','muted');layout.addWidget(self.status)
 

@@ -79,6 +79,57 @@ class ModernUiTests(TestCase):
         self.assertEqual(w.maneuver_table.item(pre,7).text(),'2.60')
         self.assertEqual(w.maneuver_table.item(post,7).text(),'2.50')
 
+    def test_small_display_keeps_capture_controls_and_scrollable_content_reachable(self):
+        from PySide6.QtWidgets import QScrollArea, QTabWidget
+        w = self.window
+        # Allow for the taskbar and frame on a 1366x768 monitor.
+        w.resize(1366, 690)
+        w.show()
+        self.qt.processEvents()
+        for page, controls in (
+            (w.measurement_page, (w.maneuver_button, w.zero_button, w.delete_button)),
+            (w.svc_page, (w.svc_page.start, w.svc_page.mark, w.svc_page.remove)),
+            (w.mvv_page, (w.mvv_page.start, w.mvv_page.mark, w.mvv_page.remove)),
+        ):
+            w.stack.setCurrentWidget(page)
+            self.qt.processEvents()
+            self.assertEqual(w.size().toTuple(), (1366, 690))
+            for control in controls:
+                top_left = control.mapTo(w, QPoint(0, 0))
+                self.assertTrue(w.rect().contains(top_left), control.text())
+                self.assertTrue(w.rect().contains(top_left + control.rect().bottomRight()), control.text())
+                table = w.maneuver_table if page is w.measurement_page else page.table
+                self.assertLess(top_left.y() + control.height(), table.mapTo(w, QPoint(0, 0)).y())
+            if page is w.measurement_page:
+                self.assertGreaterEqual(w.flow_volume_chart.height(), 140)
+                self.assertFalse(w.maneuver_table.isColumnHidden(6))
+                self.assertLess(w.elapsed_label.mapTo(w, QPoint(0, 0)).y(),
+                                w.maneuver_table.mapTo(w, QPoint(0, 0)).y())
+        w.show_summary()
+        self.qt.processEvents()
+        self.assertEqual(w.height(), 690)
+        self.assertGreater(w.summary_table.height(), 180)
+        scroll = w.summary_scroll
+        self.assertGreater(scroll.verticalScrollBar().maximum(), 0)
+        scroll.ensureWidgetVisible(w.summary_report_input)
+        self.qt.processEvents()
+        point = w.summary_report_input.mapTo(scroll.viewport(), QPoint(0, 0))
+        self.assertTrue(scroll.viewport().rect().contains(point + w.summary_report_input.rect().center()))
+        small_images = w._report_payload()['charts']
+        w.resize(1600, 1000)
+        self.qt.processEvents()
+        large_images = w._report_payload()['charts']
+        self.assertEqual([image.size() for image in small_images], [image.size() for image in large_images])
+        self.assertTrue(all(a == b for a, b in zip(small_images, large_images)))
+        w.resize(1366, 690)
+        w.stack.setCurrentWidget(w.settings_page)
+        tabs = w.settings_page.findChild(QTabWidget)
+        for index in range(tabs.count()):
+            tabs.setCurrentIndex(index)
+            self.qt.processEvents()
+            self.assertIsInstance(tabs.currentWidget(), QScrollArea)
+            self.assertEqual(w.height(), 690)
+
     def test_configured_table_view_defaults_to_full_persists_and_keeps_row_heights(self):
         w=self.window
         self.assertEqual(w.fvc_table_view_combo.currentData(),'full')
@@ -181,7 +232,7 @@ class ModernUiTests(TestCase):
             w = self.window
             for button, enabled_color, disabled_color in (
                     (w.zero_button, '#20303d', '#85949d'),
-                    (w.summary_button, '#20303d', '#85949d'),
+                    (w.delete_button, '#087f83', '#85949d'),
                     (w.maneuver_button, '#ffffff', '#566d76'),
                     (w.patients_button, '#ffffff', '#8195a0')):
                 for mode, expected in ((QIcon.Normal, enabled_color), (QIcon.Disabled, disabled_color)):
@@ -230,6 +281,99 @@ class ModernUiTests(TestCase):
             self.assertIs(w.stack.currentWidget(), w.measurement_page)
             self.assertTrue(w.maneuver_space_shortcut.isEnabled())
         self.assertEqual(before, [dict(row) for row in db.list_maneuvers_for_session(self.study)])
+
+    def test_scrollable_pages_keep_light_gaps_with_dark_system_palette(self):
+        from PySide6.QtGui import QColor, QPalette
+        from PySide6.QtWidgets import QScrollArea
+        original = self.qt.palette()
+        dark = QPalette(original)
+        for color_role in (QPalette.Window, QPalette.Base, QPalette.Button):
+            dark.setColor(color_role, QColor('#202020'))
+        self.qt.setPalette(dark)
+        window = None
+        try:
+            window = MainWindow()
+            window.current_patient_id = self.window.current_patient_id
+            window.load_study(self.study)
+            window.resize(1366, 690)
+            window.show()
+            window.show_summary()
+            self.qt.processEvents()
+            body = window.summary_scroll.widget()
+            top = window.summary_table.geometry().bottom()+1
+            bottom = window.summary_zscore_chart.geometry().top()
+            self.assertGreater(bottom, top)
+            self.assertEqual(body.grab().toImage().pixelColor(10, (top+bottom)//2).name(), '#f3f6f8')
+            for scroll in window.findChildren(QScrollArea):
+                if scroll.property('scrollBackground'):
+                    for surface in (scroll, scroll.viewport(), scroll.widget()):
+                        self.assertTrue(surface.property('scrollBackground'))
+                        self.assertEqual(surface.palette().color(QPalette.Window).name(), '#f3f6f8')
+        finally:
+            if window is not None:
+                window.close()
+            self.qt.setPalette(original)
+
+    def test_combo_popup_frame_and_padding_stay_light_in_dark_theme(self):
+        from PySide6.QtGui import QColor, QPalette
+        original = self.qt.palette()
+        dark = QPalette(original)
+        dark.setColor(QPalette.Window, QColor('#202020'))
+        dark.setColor(QPalette.Base, QColor('#202020'))
+        self.qt.setPalette(dark)
+        try:
+            w = self.window
+            w.show()
+            for page, combo in ((w.mvv_page, w.mvv_page.option),
+                                (w.svc_page, w.svc_page.option),
+                                (w.mvv_page, w.mvv_page.phase)):
+                w.stack.setCurrentWidget(page)
+                self.qt.processEvents()
+                popup = combo.view().window()
+                popup.setPalette(dark)
+                popup.setContentsMargins(0, 8, 0, 8)
+                combo.showPopup()
+                try:
+                    self.qt.processEvents()
+                    # Native desktop styles may leave menu padding above/below
+                    # the list; it must use the same light background.
+                    popup.resize(popup.width(), popup.height()+16)
+                    self.qt.processEvents()
+                    image = popup.grab().toImage()
+                    for y in (2, image.height()-3):
+                        self.assertEqual(image.pixelColor(image.width()//2, y).name(), '#ffffff')
+                    self.assertEqual(combo.view().palette().color(QPalette.Base).name(), '#ffffff')
+                finally:
+                    combo.hidePopup()
+        finally:
+            self.qt.setPalette(original)
+
+    def test_patient_row_number_strip_stays_light_below_last_row(self):
+        from PySide6.QtGui import QColor, QPalette
+        from PySide6.QtWidgets import QAbstractButton
+        original = self.qt.palette()
+        dark = QPalette(original)
+        dark.setColor(QPalette.Window, QColor('#202020'))
+        dark.setColor(QPalette.Base, QColor('#202020'))
+        self.qt.setPalette(dark)
+        w = None
+        try:
+            w = MainWindow()
+            w.show_patients()
+            w.resize(1366, 690)
+            w.show()
+            self.qt.processEvents()
+            header = w.patient_table.verticalHeader()
+            image = header.viewport().grab().toImage()
+            self.assertEqual(image.pixelColor(image.width()//2, image.height()-4).name(), '#f7fafb')
+            corner = w.patient_table.findChild(QAbstractButton)
+            self.assertIsNotNone(corner)
+            image = corner.grab().toImage()
+            self.assertEqual(image.pixelColor(image.width()//2, image.height()//2).name(), '#f7fafb')
+        finally:
+            if w is not None:
+                w.close()
+            self.qt.setPalette(original)
 
     def test_file_chooser_sidebar_stays_light_with_dark_system_palette(self):
         from PySide6.QtGui import QColor, QPalette

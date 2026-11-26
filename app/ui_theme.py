@@ -141,8 +141,21 @@ def apply_dialog_theme(dialog):
 
 
 class DialogThemeFilter(QObject):
-    """Theme every app-owned dialog, including Qt-created nested dialogs."""
+    """Theme app-owned dialogs and the separate windows used by combo boxes."""
     def eventFilter(self, watched, event):
+        if (event.type() == QEvent.Show and isinstance(watched, QWidget)
+                and watched.isWindow() and isinstance(watched.parentWidget(), QComboBox)):
+            owner = watched.parentWidget()
+            while owner is not None and owner is not self.parent():
+                owner = owner.parentWidget()
+            if owner is self.parent():
+                palette = QPalette(watched.palette())
+                for color_role, color in ((QPalette.Window, '#ffffff'), (QPalette.Base, '#ffffff'),
+                                          (QPalette.Text, '#20303d'), (QPalette.WindowText, '#20303d'),
+                                          (QPalette.Highlight, '#dcefee'), (QPalette.HighlightedText, '#163b40')):
+                    palette.setColor(color_role, QColor(color))
+                watched.setPalette(palette)
+                watched.setAutoFillBackground(True)
         if event.type() == QEvent.Show and isinstance(watched, QDialog):
             owner = watched.parentWidget()
             while owner is not None and owner is not self.parent():
@@ -246,6 +259,11 @@ QLabel[role="status"] { color: #087f83; background: #eaf5f4; border-radius: 6px;
 QLabel[role="status"][state="working"] { color: #8c6326; background: #fff4db; }
 QLabel[role="status"][state="recording"] { color: #b02f3c; background: #fdebed; }
 QLabel[role="status"][state="error"] { color: #b02f3c; background: #fdebed; }
+QLabel[role="sessionQuality"] { color: #627480; background: #e7edef;
+    border-radius: 6px; padding: 6px 10px; font-size: 12px; }
+QLabel[role="sessionQuality"][state="progress"] { color: #805b20; background: #fff4db; }
+QLabel[role="sessionQuality"][state="ready"] { color: #166534; background: #dcfce7; }
+
 QFrame[role="surface"] { background: #ffffff; border: 1px solid #dfe7eb; border-radius: 10px; }
 QFrame[role="surface"] QLabel { border: none; }
 QFrame#sidebar { background: #162b36; border: none; }
@@ -289,6 +307,7 @@ QLineEdit:focus, QTextEdit:focus, QComboBox:focus { border-color: #087f83; }
 QComboBox::drop-down { border: none; width: 22px; }
 QComboBox[referenceSelector="true"]::down-arrow { image: url("@ICONS@/chevron-down.svg"); width: 16px; height: 16px; }
 QComboBox QAbstractItemView { background: #ffffff; color: #20303d;
+    border: none; outline: none;
     selection-background-color: #dcefee; selection-color: #163b40; }
 QTableWidget { background: #ffffff; alternate-background-color: #f8fafb; color: #1f2937;
     border: 1px solid #dfe7eb; border-radius: 8px; gridline-color: #edf1f3;
@@ -296,9 +315,10 @@ QTableWidget { background: #ffffff; alternate-background-color: #f8fafb; color: 
 QTableWidget::item { padding: 4px 6px; border-bottom: 1px solid #edf1f3; }
 QTableWidget::item:selected { background: #eaf5f4; }
 QTableWidget#maneuverTable { border: none; border-radius: 0; }
+QHeaderView, QHeaderView > QWidget { background: #f7fafb; color: #526875; }
 QHeaderView::section { background: #f7fafb; color: #526875; border: none;
     border-bottom: 1px solid #dfe7eb; padding: 9px 8px; font-size: 11px; font-weight: 500; }
-QTableCornerButton::section { background: #f7fafb; border: none; }
+QTableCornerButton, QTableCornerButton::section { background: #f7fafb; border: none; }
 QGroupBox { background: #ffffff; border: 1px solid #dfe7eb; border-radius: 10px;
     margin-top: 14px; padding: 18px 12px 12px; font-weight: 600; }
 QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left;
@@ -310,6 +330,7 @@ QTabBar::tab:selected { color: #087f83; border-bottom-color: #087f83; }
 QSplitter::handle { background: #e6edef; height: 5px; margin: 3px 0; }
 QSplitter::handle:hover { background: #b3cfd1; }
 QScrollArea { border: none; background: transparent; }
+QWidget[scrollBackground="true"] { background: #f3f6f8; }
 QScrollBar:vertical { background: #f3f6f8; width: 10px; margin: 0; }
 QScrollBar::handle:vertical { background: #bdcdd5; border-radius: 4px; min-height: 26px; }
 QScrollBar:horizontal { background: #f3f6f8; height: 10px; margin: 0; }

@@ -6,6 +6,7 @@ from app.reference_policy import (FVC_PARAMETERS, PARAMETERS, EQUATIONS, SUPPORT
                                   configured_selection, reference_label, reference_description)
 from app.reference_values import respiratory_references, respiratory_predicted
 from app.fvc_display import volume_time_curve
+from app.fvc_quality import (processing as quality_processing, quality_text, metric_eligible, annotate as annotate_quality, plot_regions, assessment as quality_assessment, STATES as QUALITY_STATES)
 from datetime import datetime
 
 from PySide6.QtCore import QMarginsF, QRectF, QThread, Qt, QTimer, QSignalBlocker
@@ -13,6 +14,7 @@ from PySide6.QtGui import QColor, QFont, QIcon, QImage, QPixmap, QKeySequence, Q
 from PySide6.QtPrintSupport import QPrintPreviewDialog, QPrinter
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QButtonGroup,
     QComboBox,
     QCheckBox,
@@ -20,7 +22,6 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFormLayout,
     QFrame,
-    QGroupBox,
     QHeaderView,
     QHBoxLayout,
     QLabel,
@@ -36,6 +37,7 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QSpinBox,
     QSplitter,
+    QScrollArea,
     QSizePolicy,
     QGridLayout,
     QVBoxLayout,
@@ -60,7 +62,6 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle(APP_NAME + " · CPFS/D")
         self.setWindowIcon(app_icon())
-        self.resize(1280, 840)
         apply_theme(self)
         install_dialog_theme(self)
 
@@ -94,6 +95,7 @@ class MainWindow(QMainWindow):
         self.calibration_worker = None
         self.calibration_strokes = []
         self.live_calibration_curve = []
+        self._last_quality_ready = {}
 
         db.init_db()
         self._build_ui()
@@ -101,6 +103,17 @@ class MainWindow(QMainWindow):
         self.stack.currentChanged.connect(self.update_navigation)
         self.refresh_patients()
         self.show_patients()
+        available = self.screen().availableGeometry()
+        self.resize(min(1280, available.width() - 24), min(840, available.height() - 48))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if not hasattr(self, 'mvv_page'):
+            return
+        chart_height = 140 if self.height() < 760 else 180
+        for chart in (self.flow_volume_chart, self.volume_time_chart,
+                      self.svc_page.chart, self.mvv_page.chart):
+            chart.setMinimumHeight(chart_height)
 
     def _build_ui(self):
         root = QWidget()
@@ -165,9 +178,7 @@ class MainWindow(QMainWindow):
         workspace.setObjectName("workspace")
         content = QVBoxLayout(workspace)
         content.setContentsMargins(22, 16, 22, 14)
-        content.setSpacing(12)
-        self.page_caption = role(QLabel("Pacientes"), "eyebrow")
-        content.addWidget(self.page_caption)
+        content.setSpacing(8)
         self.stack = QStackedWidget()
         self.patient_list_page = self._build_patient_list_page()
         self.new_patient_page = self._build_new_patient_page()
@@ -186,7 +197,7 @@ class MainWindow(QMainWindow):
             self.calibration_page, self.settings_page,
         ):
             page.layout().setContentsMargins(0, 0, 0, 0)
-            page.layout().setSpacing(12)
+            page.layout().setSpacing(8)
             self.stack.addWidget(page)
         content.addWidget(self.stack, 1)
         layout.addWidget(workspace, 1)
@@ -215,12 +226,6 @@ class MainWindow(QMainWindow):
                   else self.settings_button if page == self.settings_page else self.patients_button)
         active.setChecked(True)
         self.study_button.setEnabled(self.current_session_id is not None)
-        captions = {self.patient_list_page: "Pacientes", self.new_patient_page: "Pacientes / Ficha",
-                    self.patient_detail_page: "Pacientes / " + self.patient_history_tabs.tabText(self.patient_history_tabs.currentIndex()), self.new_study_page: "Pacientes / Nuevo estudio",
-                    self.svc_page: "Pacientes / SVC", self.mvv_page: "Pacientes / MVV",
-                    self.measurement_page: "Pacientes / FVC", self.summary_page: "Pacientes / Sumario",
-                    self.calibration_page: "Equipo / Calibración diaria", self.settings_page: "Configuración"}
-        self.page_caption.setText(captions.get(page, "NeumoFlow"))
         for button, target in ((self.measurement_tab,self.measurement_page),(self.svc_tab,self.svc_page),
                                (self.mvv_tab,self.mvv_page),(self.measurement_summary_tab,self.summary_page)):
             button.setChecked(page == target)
@@ -251,10 +256,32 @@ class MainWindow(QMainWindow):
         layout.addWidget(chart, 1)
         return frame
 
+    def _titled_panel(self, title):
+        frame = self._surface()
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(20, 16, 20, 20)
+        layout.setSpacing(16)
+        label = role(QLabel(title), 'sectionTitle')
+        layout.addWidget(label)
+        return frame, label, layout
+
     def _make_button(self, text, icon):
         button = QPushButton(text)
         set_button_icon(button, icon)
         return button
+
+    @staticmethod
+    def _scroll_content(widget):
+        """Keep long pages reachable without increasing the window minimum size."""
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidget(widget)
+        # The viewport and the content can retain the system's dark Window
+        # brush when QScrollArea itself has a transparent background.
+        for surface in (scroll, scroll.viewport(), widget):
+            surface.setProperty('scrollBackground', True)
+        return scroll
 
     @staticmethod
     def _patient_heading(name, details):
@@ -349,8 +376,10 @@ class MainWindow(QMainWindow):
     def _build_new_patient_page(self):
         root = QWidget()
         layout = QVBoxLayout(root)
-        self.patient_form_box = QGroupBox("Nuevo paciente")
-        form = QFormLayout(self.patient_form_box)
+        self.patient_form_box, self.patient_form_title, box_layout = self._titled_panel("Nuevo paciente")
+        form = QFormLayout()
+        form.setContentsMargins(0, 0, 0, 0)
+        box_layout.addLayout(form)
         form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
         self.last_name_input = QLineEdit()
         self.first_name_input = QLineEdit()
@@ -434,8 +463,9 @@ class MainWindow(QMainWindow):
     def _build_new_study_page(self):
         root = QWidget()
         layout = QVBoxLayout(root)
-        box = QGroupBox("Nuevo estudio")
-        form = QFormLayout(box)
+        box, _, box_layout = self._titled_panel("Nuevo estudio")
+        form = QFormLayout()
+        form.setContentsMargins(0, 0, 0, 0)
         form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
         self.study_age_label = QLabel("-")
         self.study_weight_input = QLineEdit()
@@ -446,6 +476,7 @@ class MainWindow(QMainWindow):
         form.addRow("Edad", self.study_age_label)
         form.addRow("Peso kg", self.study_weight_input)
         form.addRow("Altura cm", self.study_height_input)
+        box_layout.addLayout(form)
         layout.addWidget(box)
 
         buttons = QHBoxLayout()
@@ -471,7 +502,6 @@ class MainWindow(QMainWindow):
                                               self.measurement_patient_data_label), 1)
         self.measurement_date_label = role(QLabel("Estudio FVC"), 'muted')
         self.measurement_date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        header.addWidget(self.measurement_date_label)
         layout.addLayout(header)
 
         self.study_tabs = QWidget()
@@ -500,7 +530,12 @@ class MainWindow(QMainWindow):
         self.phase_selector.addItem("POST", "post")
         self.phase_selector.currentIndexChanged.connect(self.phase_changed)
         toolbar.addWidget(self.phase_selector)
+        self.session_quality_label = role(QLabel('Realizá una maniobra'), 'sessionQuality')
+        self.session_quality_label.setWordWrap(True)
+        self.session_quality_label.setProperty('state', 'empty')
+        toolbar.addWidget(self.session_quality_label, 1)
         toolbar.addStretch()
+        toolbar.addWidget(self.measurement_date_label)
         self.status_label = StatusLabel("Listo")
         self.status_label.setMinimumWidth(240)
         self.status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -584,26 +619,17 @@ class MainWindow(QMainWindow):
         self.maneuver_button.setToolTip("Barra espaciadora: iniciar o finalizar la maniobra")
         self.maneuver_button.setAccessibleDescription("Barra espaciadora para iniciar o finalizar")
         controls.addWidget(self.maneuver_button)
-        self.space_hint_label = role(QLabel("Espacio"), 'muted')
-        controls.addWidget(self.space_hint_label)
         self.elapsed_label = role(QLabel("0 s"), 'timer')
         self.elapsed_label.setAlignment(Qt.AlignCenter)
         controls.addWidget(self.elapsed_label)
         self.zero_button = self._make_button("Flujo cero", QStyle.SP_BrowserReload)
         self.zero_button.clicked.connect(self.repeat_zero)
         controls.addWidget(self.zero_button)
-        controls.addStretch()
         self.delete_button = role(self._make_button("Borrar excluidas", QStyle.SP_TrashIcon), 'link')
         self.delete_button.setEnabled(False)
         self.delete_button.clicked.connect(self.delete_excluded_maneuvers)
         controls.addWidget(self.delete_button)
-        self.summary_button = self._make_button("Ver sumario", QStyle.SP_ArrowForward)
-        self.summary_button.clicked.connect(self.show_summary)
-        controls.addWidget(self.summary_button)
-        layout.addLayout(controls)
-        self.measurement_environment_label = role(QLabel("Ambiente: calibración diaria"), 'muted')
-        self.measurement_environment_label.setWordWrap(True)
-        layout.addWidget(self.measurement_environment_label)
+        header.addLayout(controls)
         self.maneuver_space_shortcut = QShortcut(QKeySequence(Qt.Key_Space), root)
         self.maneuver_space_shortcut.setAutoRepeat(False)
         self.maneuver_space_shortcut.setEnabled(False)
@@ -631,6 +657,40 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'flow_volume_chart') and not self.updating_maneuver_table and not self.capture_active:
             self.refresh_visible_curves()
 
+    def review_selected_quality(self):
+        row = self.maneuver_table.currentRow()
+        if self.capture_active or not self._row_is_maneuver(row):
+            return
+        key = int(self.maneuver_table.item(row, 0).text())
+        record = next(m for m in db.list_maneuvers_for_session(self.current_session_id) if m['id'] == key)
+        params = quality_processing(record)
+        if params.get('origin') == 'breeze':
+            QMessageBox.information(self, 'Calidad original', 'Este estudio conserva la calidad exportada por Breeze; no se reanalizan sus curvas.')
+            return
+        if params.get('quality_version') != 1:
+            if not params.get('vol_curve'):
+                QMessageBox.information(self, 'Calidad', 'No hay una curva espiratoria guardada para evaluar los artefactos.')
+                return
+            params = annotate_quality(params)
+        self.flow_volume_chart.set_quality_regions(plot_regions(params, acquisition=True))
+        self.volume_time_chart.set_quality_regions(plot_regions(params))
+        from app.quality_dialog import QualityReviewDialog
+        dialog = QualityReviewDialog(params, self)
+        try:
+            if dialog.exec() == QDialog.Accepted:
+                db.review_maneuver_quality(key, params, dialog.decisions())
+                updated = next(m for m in db.list_maneuvers_for_session(self.current_session_id) if m['id'] == key)
+                text = quality_text(quality_processing(updated))
+                item = self.maneuver_table.item(self._row_for_maneuver(key), 17)
+                item.setText(text)
+                item.setToolTip(text)
+                self.refresh_study_summary()
+        except ValueError as exc:
+            QMessageBox.warning(self, 'Revisión de calidad', str(exc))
+        finally:
+            self.refresh_visible_curves()
+            dialog.deleteLater()
+
     def _build_summary_page(self):
         root = QWidget()
         layout = QVBoxLayout(root)
@@ -650,6 +710,13 @@ class MainWindow(QMainWindow):
         header.addWidget(save_pdf_button)
         layout.addLayout(header)
 
+        body = QWidget()
+        self.summary_scroll = self._scroll_content(body)
+        layout.addWidget(self.summary_scroll, 1)
+        layout = QVBoxLayout(body)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
         self.summary_table = QTableWidget(0, 9)
         self._set_light_result_palette(self.summary_table)
         self.summary_table.setHorizontalHeaderLabels(
@@ -660,6 +727,7 @@ class MainWindow(QMainWindow):
         self.summary_table.verticalHeader().setDefaultSectionSize(28)
         self.summary_table.verticalHeader().hide()
         self.summary_table.setShowGrid(False)
+        self.summary_table.setMinimumHeight(190)
         layout.addWidget(self.summary_table)
 
         self.summary_zscore_chart = ZScoreWidget()
@@ -784,8 +852,7 @@ class MainWindow(QMainWindow):
                              "Se aplica a las tablas de maniobras y sumario cuando hay referencia disponible.")
         explanation.setWordWrap(True)
         fvc_layout.addWidget(explanation)
-        equation_group = QGroupBox("Ecuaciones de referencia por parámetro")
-        equation_layout = QVBoxLayout(equation_group)
+        equation_group, _, equation_layout = self._titled_panel("Ecuaciones de referencia por parámetro")
         equation_form = QFormLayout()
         selection = configured_selection(db.get_setting(SETTING))
         self.reference_combos = {}
@@ -822,7 +889,7 @@ class MainWindow(QMainWindow):
         for combo in self.reference_combos.values():
             combo.currentIndexChanged.connect(self.save_reference_selection)
         fvc_layout.addStretch()
-        tabs.addTab(fvc_tab, "FVC")
+        tabs.addTab(self._scroll_content(fvc_tab), "FVC")
 
         transfer_tab = QWidget()
         transfer_layout = QVBoxLayout(transfer_tab)
@@ -842,7 +909,7 @@ class MainWindow(QMainWindow):
         transfer_note.setWordWrap(True)
         transfer_layout.addWidget(transfer_note)
         transfer_layout.addStretch()
-        tabs.addTab(transfer_tab, "Importar / exportar")
+        tabs.addTab(self._scroll_content(transfer_tab), "Importar / exportar")
 
         report_tab = QWidget()
         report_layout = QVBoxLayout(report_tab)
@@ -943,7 +1010,7 @@ class MainWindow(QMainWindow):
         save_button.clicked.connect(self.save_report_settings)
         report_layout.addWidget(save_button)
         report_layout.addStretch()
-        tabs.addTab(report_tab, "Informe")
+        tabs.addTab(self._scroll_content(report_tab), "Informe")
 
         layout.addWidget(tabs)
         return root
@@ -1273,7 +1340,7 @@ class MainWindow(QMainWindow):
 
     def show_new_patient(self):
         self.editing_patient_id = None
-        self.patient_form_box.setTitle("Nuevo paciente")
+        self.patient_form_title.setText("Nuevo paciente")
         self.save_patient_button.setText("Guardar paciente")
         self.last_name_input.clear()
         self.first_name_input.clear()
@@ -1376,7 +1443,7 @@ class MainWindow(QMainWindow):
             self.refresh_patients()
             return
         self.editing_patient_id = patient_id
-        self.patient_form_box.setTitle("Editar paciente")
+        self.patient_form_title.setText("Editar paciente")
         self.save_patient_button.setText("Guardar cambios")
         self.last_name_input.setText(patient["last_name"] or "")
         self.first_name_input.setText(patient["first_name"] or "")
@@ -1457,12 +1524,12 @@ class MainWindow(QMainWindow):
         self.measurement_date_label.setText(str(session["created_at"])[:16].replace("T", " · "))
         patient = db.get_patient(self.current_patient_id)
         self.measurement_patient_label.setText(f"{patient['first_name']} {patient['last_name']}")
-        self.measurement_environment_label.setText(
+        self.zero_button.setToolTip(
             "Jeringa · sin corrección BTPS" if patient['no_btps'] else
             f"Paciente · ambiente de calibración diaria: {spirometry._cal.get('fecha', 'pendiente')}")
         source = json.loads(session["source_json"] or "{}")
         if source.get("origin") == "breeze":
-            self.measurement_environment_label.setText("Importado de Breeze · calibración original: " + str(session["calibration_date"] or "sin fecha"))
+            self.zero_button.setToolTip("Importado de Breeze · calibración original: " + str(session["calibration_date"] or "sin fecha"))
         self.measurement_patient_data_label.setText(
             f"DNI: {patient['dni'] or '-'}    "
             f"Edad: {self._fmt_age(patient['birth_date'])}    "
@@ -1699,11 +1766,15 @@ class MainWindow(QMainWindow):
         session = db.get_session(self.current_session_id)
         charts = []
         for chart in (self.summary_flow_volume_chart, self.summary_volume_time_chart):
-            image = QImage(chart.size(), QImage.Format_ARGB32)
+            # Report graphs must not inherit a short viewport from a small monitor.
+            print_chart = CurveWidget(chart.mode)
+            print_chart.resize(520, 420)
+            print_chart.set_curves(chart.curves)
+            print_chart.set_curve_styles(chart.curve_colors)
+            print_chart.print_mode = True
+            image = QImage(print_chart.size(), QImage.Format_ARGB32)
             image.fill(Qt.white)
-            chart.print_mode = True
-            chart.render(image)
-            chart.print_mode = False
+            print_chart.render(image)
             charts.append(image)
         headers = [
             self.summary_table.horizontalHeaderItem(col).text()
@@ -1807,6 +1878,7 @@ class MainWindow(QMainWindow):
         self.set_study_phase()
 
     def _insert_saved_maneuver_row(self, maneuver, patient, session):
+        processing = quality_processing(maneuver)
         params = {
             "fvc": maneuver["fvc"],
             "fev1": maneuver["fev1"],
@@ -1839,13 +1911,14 @@ class MainWindow(QMainWindow):
             self._fmt_reference(references, "fef2575", "zscore"),
             self._fmt_metric(maneuver["pef"]),
             self._fmt_metric(maneuver["duration"]),
-            self._fmt_quality(self._quality_errors_from_row(maneuver)),
+            quality_text(processing) if processing.get("quality_version") else self._fmt_quality(self._quality_errors_from_row(maneuver)),
         ]
         self.updating_maneuver_table = True
         for col, value in enumerate(values):
             item = QTableWidgetItem(value)
             if col == 2:
                 item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                item.setToolTip('Incluir la maniobra. Los parámetros afectados por alertas de calidad requieren revisión por separado.')
                 item.setCheckState(Qt.Checked if maneuver["review_status"] == "accepted" else Qt.Unchecked)
             if col == 3:
                 item.setText("")
@@ -1854,11 +1927,12 @@ class MainWindow(QMainWindow):
             if col in {4, 7, 10}:
                 self._set_bold(item)
             item.setTextAlignment(Qt.AlignCenter)
+            if col == 17 and self._row_is_maneuver(row):
+                item.setToolTip(value + '\nEvaluación orientativa: requiere revisión visual del operador.')
             self.maneuver_table.setItem(row, col, item)
         self.updating_maneuver_table = False
         # Persisted tuples do not retain cached flow or filter history. Reuse
         # the recorded curve instead of applying a different model on reopen.
-        processing = json.loads(maneuver["processing_json"] or "{}")
         self.maneuver_volume_time_curves[maneuver["id"]]=volume_time_curve(processing)
         curve = processing.get("acq_curve") or processing.get("vol_curve") or []
         if curve:
@@ -2063,7 +2137,9 @@ class MainWindow(QMainWindow):
         repolish(self.maneuver_button)
         set_button_icon(self.maneuver_button, QStyle.SP_MediaStop)
         self.status_label.setText("Iniciando captura")
-        self.measurement_environment_label.setText(spirometry.descripcion_ambiente(environment) +
+        self.flow_volume_chart.set_quality_regions([])
+        self.volume_time_chart.set_quality_regions([])
+        self.zero_button.setToolTip(spirometry.descripcion_ambiente(environment) +
             (f" · calibración {environment['calibration_date']}" if 'calibration_date' in environment else ""))
         self.worker.start_capture(environment)
 
@@ -2131,7 +2207,7 @@ class MainWindow(QMainWindow):
             self._fmt_reference(references, "fef2575", "zscore"),
             self._fmt_metric(params.get("pef")),
             self._fmt_metric(params.get("duracion")),
-            self._fmt_quality(params.get("calidad_errores", [])),
+            quality_text(params),
         ]
         self.updating_maneuver_table = True
         for col, value in enumerate(values):
@@ -2139,6 +2215,7 @@ class MainWindow(QMainWindow):
             if col == 2:
                 item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
                 item.setCheckState(Qt.Checked)
+                item.setToolTip('Incluir la maniobra. Los parámetros afectados por alertas de calidad requieren revisión por separado.')
             if col == 3:
                 item.setText("")
                 item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
@@ -2146,6 +2223,8 @@ class MainWindow(QMainWindow):
             if col in {4, 7, 10}:
                 self._set_bold(item)
             item.setTextAlignment(Qt.AlignCenter)
+            if col == 17 and self._row_is_maneuver(row):
+                item.setToolTip(value + '\nEvaluación orientativa: requiere revisión visual del operador.')
             self.maneuver_table.setItem(row, col, item)
         self.updating_maneuver_table = False
         self.maneuver_table.selectRow(row)
@@ -2159,7 +2238,7 @@ class MainWindow(QMainWindow):
         mode = params.get('environment', {}).get('mode')
         self.status_label.setText("Maniobra guardada · " + (
             "paciente, corrección ambiental CPFS" if mode == 'patient' else "jeringa, sin corrección BTPS"))
-        self.refresh_study_summary()
+        self.refresh_study_summary(notify=True)
         self.update_maneuver_buttons()
 
     def delete_excluded_maneuvers(self):
@@ -2240,6 +2319,7 @@ class MainWindow(QMainWindow):
                 page.phase.setCurrentIndex(page.phase.findData(phase))
         self.status_label.setText(f"Fase {self.current_phase.upper()}")
         self.apply_maneuver_table_view()
+        self.update_session_feedback()
 
     def update_maneuver_buttons(self):
         has_excluded = any(
@@ -2271,6 +2351,10 @@ class MainWindow(QMainWindow):
 
     def refresh_visible_curves(self):
         ids = [key for key in self.maneuver_curves if self.maneuver_selected.get(key, False)]
+        selected_row = self.maneuver_table.currentRow()
+        selected_id = int(self.maneuver_table.item(selected_row, 0).text()) if self._row_is_maneuver(selected_row) else None
+        if selected_id in self.maneuver_curves and selected_id not in ids:
+            ids.append(selected_id)
         self.study_curves = [self.maneuver_curves[key] for key in ids]
         colors = self.maneuver_colors()
         self.study_curve_colors = [colors[key] for key in ids]
@@ -2296,6 +2380,10 @@ class MainWindow(QMainWindow):
         self.study_volume_time_colors=[colors[key] for key in volume_ids]
         self.volume_time_chart.set_curve_styles(self.study_volume_time_colors,volume_ids.index(selected) if selected in volume_ids else None)
         self.volume_time_chart.set_curves(self.study_volume_time_curves)
+        record = next((m for m in db.list_maneuvers_for_session(self.current_session_id) if m['id'] == selected), None) if selected else None
+        params = quality_processing(record) if record else {}
+        self.flow_volume_chart.set_quality_regions(plot_regions(params, acquisition=True))
+        self.volume_time_chart.set_quality_regions(plot_regions(params))
 
     def add_predicted_row(self):
         row = self.maneuver_table.rowCount()
@@ -2330,6 +2418,8 @@ class MainWindow(QMainWindow):
             if col in {1, 4, 7, 10}:
                 self._set_bold(item)
             item.setTextAlignment(Qt.AlignCenter)
+            if col == 17 and self._row_is_maneuver(row):
+                item.setToolTip(value + '\nEvaluación orientativa: requiere revisión visual del operador.')
             self.maneuver_table.setItem(row, col, item)
         self.updating_maneuver_table = False
 
@@ -2342,6 +2432,8 @@ class MainWindow(QMainWindow):
             item = QTableWidgetItem(value)
             item.setBackground(QColor("#e1f1ef"))
             item.setTextAlignment(Qt.AlignCenter)
+            if col == 17 and self._row_is_maneuver(row):
+                item.setToolTip(value + '\nEvaluación orientativa: requiere revisión visual del operador.')
             self.maneuver_table.setItem(row, col, item)
         self.updating_maneuver_table = False
 
@@ -2358,6 +2450,8 @@ class MainWindow(QMainWindow):
                 self._set_bold(item)
             item.setToolTip("Resumen de mejores valores incluidos en " + phase.upper())
             item.setTextAlignment(Qt.AlignCenter)
+            if col == 17 and self._row_is_maneuver(row):
+                item.setToolTip(value + '\nEvaluación orientativa: requiere revisión visual del operador.')
             self.maneuver_table.setItem(row, col, item)
         self.updating_maneuver_table = False
 
@@ -2373,7 +2467,7 @@ class MainWindow(QMainWindow):
                 return row
         return self.maneuver_table.rowCount()
 
-    def refresh_study_summary(self):
+    def refresh_study_summary(self, notify=False):
         if self.current_session_id is None:
             return
         maneuvers = db.list_maneuvers_for_session(self.current_session_id)
@@ -2443,6 +2537,17 @@ class MainWindow(QMainWindow):
             references = gli2012_for_maneuver(patient, session, dict(maneuver))
             self._color_reference_cells(self.maneuver_table, row, dict(maneuver), references,
                 {'fvc':(4,5,6), 'fev1':(7,8,9), 'fev1_fvc':(10,11), 'fef2575':(12,13,14)})
+            params = quality_processing(maneuver)
+            if params.get('quality_version') == 1:
+                states = quality_assessment(params)
+                for metric, columns in (('fvc', (4,5,6)), ('fev1', (7,8,9))):
+                    state = states[metric]
+                    note = metric.upper()+': '+QUALITY_STATES[state['state']]
+                    if state['reasons']:
+                        note += '. '+'; '.join(state['reasons'])+'. No aporta al sumario hasta resolver la calidad.'
+                    for column in columns:
+                        item = self.maneuver_table.item(row, column)
+                        item.setToolTip((item.toolTip()+'\n'+note).strip())
 
         self._ensure_print_selection(best_ids, maneuvers_by_id)
 
@@ -2450,7 +2555,30 @@ class MainWindow(QMainWindow):
         self._update_phase_summary_row("post", best_post_fvc, best_post_fev1, best_post_fef2575, best_post_pef, best_pre_fvc, best_pre_fev1, best_pre_fef2575)
         self.refresh_summary_page()
         self.apply_maneuver_table_view()
+        self.update_session_feedback(maneuvers, notify=notify)
 
+    def update_session_feedback(self, maneuvers=None, notify=False):
+        if self.current_session_id is None:
+            return
+        from app.session_quality import session_feedback
+        from app.reference_values import age_years
+        patient = db.get_patient(self.current_patient_id)
+        session = db.get_session(self.current_session_id)
+        try:
+            age = age_years(patient['birth_date'], datetime.fromisoformat(session['created_at']).date())
+        except (ValueError, TypeError):
+            age = None
+        maneuvers = maneuvers if maneuvers is not None else db.list_maneuvers_for_session(self.current_session_id)
+        result = session_feedback(maneuvers, self.current_phase, age)
+        key = (self.current_session_id, self.current_phase)
+        previous = self._last_quality_ready.get(key, False)
+        self._last_quality_ready[key] = result['ready']
+        self.session_quality_label.setText(result['text'])
+        self.session_quality_label.setToolTip(result['tooltip'])
+        self.session_quality_label.setProperty('state', result['state'])
+        repolish(self.session_quality_label)
+        if notify and result['ready'] and not previous:
+            QApplication.beep()
 
     def rank_maneuver_rows(self, maneuvers_by_id):
         """Order only the maneuver rows in each phase by descending FVC + FEV1."""
@@ -2478,12 +2606,12 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _best_metric(maneuvers, key):
-        valid = [m for m in maneuvers if m[key] is not None]
+        valid = [m for m in maneuvers if m[key] is not None and metric_eligible(m, key)]
         return max(valid, key=lambda m: m[key]) if valid else None
 
     def _phase_summary(self, label, maneuvers):
-        fvc_values = sorted((m["fvc"] for m in maneuvers if m["fvc"] is not None), reverse=True)
-        fev1_values = sorted((m["fev1"] for m in maneuvers if m["fev1"] is not None), reverse=True)
+        fvc_values = sorted((m["fvc"] for m in maneuvers if m["fvc"] is not None and metric_eligible(m, "fvc")), reverse=True)
+        fev1_values = sorted((m["fev1"] for m in maneuvers if m["fev1"] is not None and metric_eligible(m, "fev1")), reverse=True)
         parts = [f"{label}: {len(maneuvers)} sel."]
         if fvc_values:
             parts.append(f"FVC {fvc_values[0]:.2f} L")
@@ -2733,7 +2861,8 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _fmt_quality(errors):
-        return "OK" if not errors else "; ".join(errors)
+        labels = {'Tos':'Posible tos', 'Cierre glotico':'Posible cierre glótico'}
+        return "OK" if not errors else "; ".join(labels.get(error, error) for error in errors)
 
     @staticmethod
     def _quality_errors_from_row(maneuver):

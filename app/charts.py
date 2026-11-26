@@ -1,5 +1,7 @@
 import math
 
+from app.plot_markers import draw_zscore_marker
+
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QWidget
@@ -36,6 +38,7 @@ class CurveWidget(QWidget):
         self.curves = []
         self.curve_colors = []
         self.highlighted_curve = None
+        self.quality_regions = []
         self.print_mode = False
         self.calibration_mode = False
         self._study_limits = None
@@ -54,6 +57,10 @@ class CurveWidget(QWidget):
         """Presentation only: keep a maneuver's color when other curves are hidden."""
         self.curve_colors = list(colors)
         self.highlighted_curve = highlighted
+        self.update()
+
+    def set_quality_regions(self, regions):
+        self.quality_regions = list(regions or [])
         self.update()
 
     def configure_study_axes(self, volume_l, time_s=10., flow_lps=12.):
@@ -227,6 +234,32 @@ class CurveWidget(QWidget):
             painter.setPen(QPen(color, 2.5 if emphasized else 1.6))
             painter.drawPath(path)
 
+        if not self.print_mode:
+            painter.save()
+            painter.setClipRect(bounds)
+            for index, region in enumerate(self.quality_regions):
+                points = region['points']
+                color = QColor('#b91c1c' if region.get('confirmed') else '#b45309')
+                overlay = QPainterPath()
+                for i, (t, v, flow) in enumerate(points):
+                    point = map_point(v, flow) if self.mode == 'flow_volume' else map_point(t, v)
+                    if i == 0:
+                        overlay.moveTo(point)
+                    else:
+                        overlay.lineTo(point)
+                if self.mode == 'volume_time':
+                    shade = QColor(color)
+                    shade.setAlpha(28)
+                    left, right = map_point(points[0][0], 0).x(), map_point(points[-1][0], 0).x()
+                    painter.fillRect(QRectF(left, bounds.top(), max(2., right-left), bounds.height()), shade)
+                painter.setPen(QPen(color, 4, Qt.DashLine))
+                painter.drawPath(overlay)
+                text_rect = QRectF(bounds.left()+5, bounds.top()+4+index*18, bounds.width()-10, 17)
+                painter.fillRect(text_rect, QColor(255, 255, 255, 225))
+                painter.setPen(color)
+                painter.drawText(text_rect, Qt.AlignLeft | Qt.AlignVCenter, region['label'])
+            painter.restore()
+
         painter.setPen(QColor(axis_color))
         if self.mode != "volume_time" and not stable:
             painter.drawText(bounds.left(), self.height() - 12, f"{data_min_x:.2f}" if data_min_x < 0 else "0")
@@ -247,7 +280,7 @@ class ZScoreWidget(QWidget):
         super().__init__(parent)
         self.rows = []
         self.threshold_label = "LLN"
-        self.setMinimumHeight(130)
+        self.setMinimumHeight(150)
         self.setMaximumHeight(170)
 
     def set_rows(self, rows):
@@ -317,20 +350,13 @@ class ZScoreWidget(QWidget):
             painter.setPen(QPen(QColor("#cbd5e1"), 1))
             painter.drawLine(QPointF(left, cy), QPointF(right, cy))
             if pre is not None:
-                painter.setBrush(QColor("#2563eb"))
-                painter.setPen(Qt.NoPen)
-                painter.drawEllipse(QPointF(map_x(pre), cy), 4, 4)
+                draw_zscore_marker(painter, map_x(pre), cy, 4, 'pre')
             if post is not None:
-                painter.setBrush(QColor("#dc2626"))
-                painter.setPen(Qt.NoPen)
-                painter.drawEllipse(QPointF(map_x(post), cy), 4, 4)
+                draw_zscore_marker(painter, map_x(post), cy, 4, 'post')
 
         legend_y = self.height() - 20
-        painter.setBrush(QColor("#2563eb"))
-        painter.setPen(Qt.NoPen)
-        painter.drawEllipse(QPointF(left + 4, legend_y + 5), 4, 4)
-        painter.setBrush(QColor("#dc2626"))
-        painter.drawEllipse(QPointF(left + 62, legend_y + 5), 4, 4)
+        draw_zscore_marker(painter, left + 4, legend_y + 5, 4, 'pre')
+        draw_zscore_marker(painter, left + 62, legend_y + 5, 4, 'post')
         painter.setBrush(Qt.NoBrush)
         painter.setPen(QColor("#374151"))
         painter.drawText(QRectF(left + 12, legend_y, 42, 16), Qt.AlignLeft | Qt.AlignVCenter, "PRE")

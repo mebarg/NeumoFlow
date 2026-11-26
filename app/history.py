@@ -3,6 +3,7 @@ import json
 import math
 from datetime import datetime
 from app import db
+from app.fvc_quality import metric_eligible
 from app.reference_policy import reference_label, reference_description
 from app.respiratory_measurements import summary as respiratory_summary
 
@@ -15,7 +16,7 @@ METRICS = {
 
 def fvc_summary(maneuvers):
     def best(key):
-        values=[m[key] for m in maneuvers if m[key] is not None]
+        values=[m[key] for m in maneuvers if m[key] is not None and metric_eligible(m, key)]
         return max(values) if values else None
     result={key:best(key) for key in ('fvc','fev1','fef2575','pef')}
     result['fev1_fvc']=result['fev1']/result['fvc'] if result['fvc'] and result['fev1'] is not None else None

@@ -8,10 +8,11 @@ from datetime import datetime
 import json
 import math
 
+from app.fvc_quality import metric_eligible, processing as quality_processing
 from app.reference_values import age_years, gli2012_for_maneuver
 from app.reference_policy import reference_description, study_policy
 
-VERSION = 'spirometry-draft-v1'
+VERSION = 'spirometry-draft-v2'
 
 
 def _finite(value):
@@ -27,13 +28,17 @@ def _read_json(value, fallback):
 
 def _phase(records, patient, session, references):
     issues=[]
-    fvc=sorted((r['fvc'] for r in records if _finite(r.get('fvc')) and r['fvc']>0),reverse=True)
-    fev1=sorted((r['fev1'] for r in records if _finite(r.get('fev1')) and r['fev1']>0),reverse=True)
+    fvc=sorted((r['fvc'] for r in records if _finite(r.get('fvc')) and r['fvc']>0 and metric_eligible(r, 'fvc')),reverse=True)
+    fev1=sorted((r['fev1'] for r in records if _finite(r.get('fev1')) and r['fev1']>0 and metric_eligible(r, 'fev1')),reverse=True)
     values={'fvc':fvc[0] if fvc else None,'fev1':fev1[0] if fev1 else None}
     values['fev1_fvc']=values['fev1']/values['fvc'] if fvc and fev1 else None
     if len(records)<3:
         issues.append('menos de tres maniobras seleccionadas')
-    if len(fvc)!=len(records) or len(fev1)!=len(records) or not records:
+    separate_quality = any(quality_processing(r).get('quality_version') == 1 for r in records)
+    if separate_quality:
+        if len(fvc)<3 or len(fev1)<3:
+            issues.append('menos de tres valores sin alertas de calidad por parámetro')
+    if not fvc or not fev1 or (not separate_quality and (len(fvc)!=len(records) or len(fev1)!=len(records))):
         issues.append('valores FVC/FEV1 ausentes o inválidos')
     if values['fev1_fvc'] is not None and values['fev1_fvc']>1+1e-9:
         issues.append('FEV1 mayor que FVC; revisar la adquisición')
@@ -55,9 +60,9 @@ def _phase(records, patient, session, references):
         processing=_read_json(record.get('processing_json'),{})
         if not isinstance(processing,dict):
             processing={}
-        if not isinstance(flags,list) or flags:
+        if processing.get('quality_version') != 1 and (not isinstance(flags,list) or flags):
             issues.append('alertas de calidad o control de calidad no disponible')
-        if any(processing.get(k) is not True for k in ('inicio_aceptable','fev1_tiempo_cubierto','meseta_eofe')):
+        if processing.get('quality_version') != 1 and any(processing.get(k) is not True for k in ('inicio_aceptable','fev1_tiempo_cubierto','meseta_eofe')):
             issues.append('inicio, cobertura de FEV1 o final espiratorio pendientes de revisión')
         env=processing.get('environment') or {}
         if not isinstance(env,dict):
@@ -119,11 +124,15 @@ def generate_report(patient, session, maneuvers, references=gli2012_for_maneuver
         values,refs,issues,env=_phase(records,patient,session,references)
         phases[phase]=(values,refs,issues,env)
         lines+=['',f'{phase.upper()}: {len(records)} maniobras seleccionadas.']
+        if any(quality_processing(m).get('quality_version') == 1 for m in records):
+            lines.append('Valores disponibles tras revisión separada: '+', '.join(
+                key.upper()+': '+str(sum(metric_eligible(m, key) and _finite(m.get(key)) for m in records))
+                for key in ('fev1', 'fvc'))+'. Las sospechas pendientes no aportan el parámetro afectado.')
         if all(_finite(values[k]) for k in ('fvc','fev1','fev1_fvc')):
             lines.append(f"FVC {values['fvc']:.2f} L; FEV1 {values['fev1']:.2f} L; FEV1/FVC {values['fev1_fvc']*100:.1f}%.")
         if len(records)>=2:
             for key in ('fvc','fev1'):
-                ordered=sorted((m[key] for m in records if _finite(m.get(key))),reverse=True)
+                ordered=sorted((m[key] for m in records if _finite(m.get(key)) and metric_eligible(m, key)),reverse=True)
                 if len(ordered)>=2:
                     lines.append(f'Diferencia entre los dos mejores {key.upper()}: {(ordered[0]-ordered[1])*1000:.0f} mL.')
         if issues:
