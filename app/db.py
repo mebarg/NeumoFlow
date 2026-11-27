@@ -108,11 +108,14 @@ def init_db():
                 conn.execute(f'UPDATE {table} SET transfer_uid = ? WHERE id = ?', (str(uuid.uuid4()), row['id']))
             conn.execute(f'CREATE UNIQUE INDEX IF NOT EXISTS idx_{table}_transfer_uid ON {table}(transfer_uid)')
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_patients_dni_unique ON patients(dni)")
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_sessions_patient_date ON sessions(patient_id, created_at)')
         conn.execute("""CREATE TABLE IF NOT EXISTS respiratory_measurements (
             id INTEGER PRIMARY KEY, session_id INTEGER NOT NULL REFERENCES sessions(id),
             kind TEXT NOT NULL CHECK(kind IN ('svc','mvv')), phase TEXT NOT NULL CHECK(phase IN ('pre','post')),
             created_at TEXT NOT NULL, included INTEGER NOT NULL DEFAULT 0 CHECK(included IN (0,1)),
             result_json TEXT NOT NULL, samples_json TEXT NOT NULL)""")
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_maneuvers_session ON maneuvers(session_id)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_respiratory_session ON respiratory_measurements(session_id)')
 
 
 def create_patient(last_name, first_name, dni="", birth_date="", sex="", ethnicity="", height_cm=None, weight_kg=None, no_btps=False):

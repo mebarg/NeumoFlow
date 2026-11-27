@@ -39,6 +39,17 @@ class TransferError(ValueError):
     pass
 
 
+class TransferCancelled(TransferError):
+    pass
+
+
+def _checkpoint(progress, cancelled, stage, done, total, name=''):
+    if cancelled and cancelled():
+        raise TransferCancelled('Operación cancelada. No se guardaron cambios.')
+    if progress:
+        progress(stage, done, total, name)
+
+
 @dataclass
 class Study:
     patient: dict
@@ -52,6 +63,30 @@ class Study:
     @property
     def uid(self):
         return self.session['transfer_uid']
+
+
+class StoredStudy(Study):
+    """Small preview row; curves live in a private temporary directory."""
+    def __init__(self, study, directory, index):
+        super().__init__(study.patient, {**study.session, 'source_json': None}, [], study.filename,
+                         study.warnings, study.duplicate_id)
+        self.maneuver_count = len(study.maneuvers) + len(study.respiratory)
+        self.directory = directory  # Keep files alive even in a selected subset.
+        self.path = Path(directory.name) / f'{index}.json'
+        try:
+            self.path.write_text(_json(_study_dict(study)), encoding='utf-8')
+        except OSError as exc:
+            # A full/unavailable temporary disk is a batch failure, not a bad COW.
+            raise RuntimeError('No se pudo guardar la vista previa temporal. Revisá el espacio libre y los permisos del disco temporal.') from exc
+
+    def load(self):
+        data = _load(self.path.read_bytes())
+        return Study(**data, filename=self.filename, warnings=self.warnings,
+                     duplicate_id=self.duplicate_id)
+
+
+def materialize(study):
+    return study.load() if isinstance(study, StoredStudy) else study
 
 
 def _json(data):
@@ -296,6 +331,7 @@ def read_breeze(path):
 
 
 def _study_dict(study):
+    study = materialize(study)
     return {'patient': study.patient, 'session': study.session, 'maneuvers': study.maneuvers, 'respiratory':study.respiratory}
 
 
@@ -369,13 +405,21 @@ def _duplicate(conn, study):
     return None
 
 
-def scan_folder(folder):
+def scan_folder(folder, progress=None, cancelled=None, spool=False):
     studies, errors, seen = [], [], set()
-    paths = sorted(p for p in Path(folder).iterdir() if p.is_file() and p.suffix.lower() in ('.cow', '.espiro'))
-    for path in paths:
-        try:
-            found = [read_breeze(path)] if path.suffix.lower() == '.cow' else read_package(path)
-            with db.connect() as conn:
+    directory = tempfile.TemporaryDirectory(prefix='neumoflow-import-') if spool else None
+    paths = []
+    _checkpoint(progress, cancelled, 'Buscando archivos', 0, 0)
+    for path in Path(folder).iterdir():
+        _checkpoint(None, cancelled, '', 0, 0)
+        if path.suffix.lower() in ('.cow', '.espiro') and path.is_file():
+            paths.append(path)
+    paths.sort()
+    with db.connect() as conn:
+        for number, path in enumerate(paths, 1):
+            _checkpoint(progress, cancelled, 'Leyendo y comprobando duplicados', number-1, len(paths), path.name)
+            try:
+                found = [read_breeze(path)] if path.suffix.lower() == '.cow' else read_package(path)
                 for study in found:
                     study.duplicate_id = _duplicate(conn, study)
                     natural = (study.patient['dni'] or study.patient['transfer_uid'], study.session['created_at'])
@@ -386,9 +430,10 @@ def scan_folder(folder):
                     seen.add(natural)
                     if _patient_match(conn, study):
                         study.warnings.append('Ficha existente: se conservan sus datos personales.')
-                    studies.append(study)
-        except (ValueError, OSError, sqlite3.Error) as exc:
-            errors.append((path.name, str(exc)))
+                    studies.append(StoredStudy(study, directory, len(studies)) if spool else study)
+            except (ValueError, OSError, sqlite3.Error) as exc:
+                errors.append((path.name, str(exc)))
+            _checkpoint(progress, cancelled, 'Leyendo y comprobando duplicados', number, len(paths), path.name)
     return studies, errors
 
 
@@ -400,31 +445,40 @@ def _insert(conn, table, fields, record, extra=None):
                         tuple(values.values())).lastrowid
 
 
-def import_studies(studies, replace=False):
+def import_studies(studies, replace=False, progress=None, cancelled=None):
     if not studies:
         raise TransferError('No hay estudios seleccionados')
-    for study in studies:
-        validate(study)
+    for index, study in enumerate(studies):
+        _checkpoint(progress, cancelled, 'Validando estudios', index, len(studies), study.filename)
+        validate(materialize(study))
     if len({s.uid for s in studies}) != len(studies):
         raise TransferError('La selección contiene estudios repetidos')
     if len({(s.patient['dni'] or s.patient['transfer_uid'], s.session['created_at']) for s in studies}) != len(studies):
         raise TransferError('La selección contiene estudios del mismo paciente y fecha repetidos')
     backup, imported, skipped, replaced = None, 0, 0, 0
+    session_ids = {}
     with db.connect() as conn:
         # All writers in this process use SQLite; recheck matches under the lock.
         conn.execute('BEGIN IMMEDIATE')
         try:
-            duplicates = [_duplicate(conn, s) for s in studies]
+            duplicates = []
+            for index, study in enumerate(studies):
+                _checkpoint(progress, cancelled, 'Comprobando duplicados', index, len(studies), study.filename)
+                duplicates.append(_duplicate(conn, study))
             if replace and any(duplicates):
+                _checkpoint(progress, cancelled, 'Creando copia de seguridad', 0, 0)
                 backup_dir = Path(db.DB_PATH).parent / 'backups'
                 backup_dir.mkdir(exist_ok=True)
                 backup = backup_dir / ('antes-importar-'+datetime.now().strftime('%Y%m%d-%H%M%S-%f')+'.sqlite3')
                 # Separate read connection avoids backing up from an open write transaction.
                 with closing(sqlite3.connect(db.DB_PATH)) as reader, closing(sqlite3.connect(backup)) as destination:
                     reader.backup(destination)
-            for study in studies:
+            for index, preview in enumerate(studies):
+                _checkpoint(progress, cancelled, 'Importando estudios', index, len(studies), preview.filename)
+                study = materialize(preview)
                 duplicate = _duplicate(conn, study)
                 if duplicate and not replace:
+                    session_ids[study.uid] = duplicate
                     skipped += 1
                     continue
                 patient = _patient_match(conn, study)
@@ -435,15 +489,18 @@ def import_studies(studies, replace=False):
                     conn.execute('DELETE FROM sessions WHERE id = ?', (duplicate,))
                     replaced += 1
                 session_id = _insert(conn, 'sessions', SESSION_FIELDS, study.session, {'patient_id': patient_id})
+                session_ids[study.uid] = session_id
                 for maneuver in study.maneuvers:
                     _insert(conn, 'maneuvers', MANEUVER_FIELDS, maneuver, {'session_id': session_id})
                 for measurement in study.respiratory:
                     _insert(conn,'respiratory_measurements',RESPIRATORY_FIELDS,measurement,{'session_id':session_id})
                 imported += 1
+            _checkpoint(progress, cancelled, 'Importando estudios', len(studies), len(studies))
         except Exception:
             conn.rollback()
             raise
-    return {'imported': imported, 'skipped': skipped, 'replaced': replaced, 'backup': str(backup) if backup else None}
+    return {'imported': imported, 'skipped': skipped, 'replaced': replaced, 'backup': str(backup) if backup else None,
+            'session_ids': session_ids}
 
 
 def export_candidates():

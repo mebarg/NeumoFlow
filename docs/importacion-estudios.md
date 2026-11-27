@@ -9,6 +9,31 @@ Los duplicados existentes se muestran desmarcados. Sin activar **Reemplazar los 
 
 Reemplazar sustituye las maniobras y el informe del estudio duplicado. No sobreescribe la ficha personal de un paciente existente. Antes del primer reemplazo se crea una copia SQLite completa en `backups/antes-importar-<fecha>.sqlite3`, junto a la base de datos. Los archivos de origen permanecen intactos. Si falla una escritura, la transacción completa se revierte.
 
+## Lotes grandes y avance
+
+La lectura muestra una barra, el número de archivos procesados y el archivo
+actual. La preparación de la tabla y la importación tienen sus propios
+contadores. La tabla se completa en tandas para mantener la interfaz disponible.
+Las actualizaciones del trabajador se limitan a unas diez por segundo.
+
+La vista previa guarda las curvas y el COW original en un directorio temporal
+privado; conserva en memoria los datos de las filas, sin acumular todas las
+curvas. Necesita espacio libre en el disco temporal. La lectura usa una sola
+conexión a SQLite y las búsquedas por paciente/fecha tienen un índice. No hay un
+límite de 10.000 archivos por carpeta: ese límite corresponde a cada paquete
+`.espiro`, no a un lote de archivos COW.
+
+**Cancelar operación** interrumpe la lectura entre archivos o estudios. Durante
+la importación revierte la transacción completa; no deja un lote parcialmente
+guardado. El archivo o estudio que se está procesando debe terminar antes de
+atender la cancelación. Los errores individuales siguen apareciendo en los
+detalles; se muestran hasta 200 observaciones para mantener la vista ágil.
+
+Las pruebas incluyen una carpeta de 14.000 archivos con lector sintético, una
+tabla de 14.000 estudios y la reversión de escrituras al cancelar. Esto verifica
+el manejo de lotes; el tiempo real depende del tamaño de los COW, el disco y el
+equipo.
+
 ## Breeze
 
 Se admiten los perfiles comprobados de COW 510: exportación en formato 6.2 y exportación cifrada 6.4.1. El productor puede indicar 6.4.1 en ambos casos. El descifrador de interoperabilidad está incluido en Python y no requiere OpenSSL, instalaciones ni configuración adicional en Windows. Se validó con vectores de RFC 2268, un COW sintético cifrado independientemente con OpenSSL y los 21 estudios proporcionados (19 pares de formato y dos visitas de jeringa).
